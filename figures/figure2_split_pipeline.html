@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<!-- FIGURE 2 — Seen/Unseen Attack Split Pipeline Diagram -->
+<!-- Placement: Section 3.3 (Seen/Unseen Attack Split) -->
+<!-- Caption: Figure 2: Dataset construction pipeline for the cross-attack generalisation
+     study. The raw DetectRL corpus is filtered by excluding spelling_error and data_mixing
+     subsets. The retained six attack-type subsets are divided into a seen partition (used
+     for training and seen-test evaluation) and an unseen partition (held out entirely;
+     used only for cross-attack generalisation evaluation). The 80/10/10 train/val/seen-test
+     split is applied only within the seen pool. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Figure 2 — Attack Split Pipeline</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #fff; font-family: 'Times New Roman', Times, serif; padding: 20px; }
+  #diagram-wrap { display: inline-block; background: #fff; padding: 24px 32px; border: 1px solid #ddd; }
+  svg text { font-family: 'Times New Roman', Times, serif; }
+  #export-btn {
+    margin-top: 14px; padding: 8px 22px; background: #2E4057; color: #fff;
+    border: none; cursor: pointer; font-family: inherit; font-size: 13px;
+    border-radius: 3px; display: block;
+  }
+  #export-btn:hover { background: #048A81; }
+  figcaption {
+    margin-top: 12px; font-size: 12px; color: #333; max-width: 840px;
+    line-height: 1.5; font-style: italic;
+  }
+</style>
+</head>
+<body>
+<figure>
+<div id="diagram-wrap">
+<svg id="pipe-svg" width="900" height="560" viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg" font-family="Times New Roman, serif">
+  <defs>
+    <marker id="arrow-navy" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L9,3.5 z" fill="#2E4057"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L9,3.5 z" fill="#048A81"/>
+    </marker>
+    <marker id="arrow-grey" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L9,3.5 z" fill="#AAA"/>
+    </marker>
+  </defs>
+
+  <!-- Title (Remains at top) -->
+  <text x="450" y="28" text-anchor="middle" font-size="14" fill="#1A1A2E" font-weight="bold">
+    Figure 2: DetectRL Dataset Construction — Seen / Unseen Attack Split
+  </text>
+  <text x="450" y="46" text-anchor="middle" font-size="10" fill="#666666">
+    ~235,200 filtered samples across 6 retained attack types · Seed = 42
+  </text>
+
+  <!-- Shift all pipeline elements down by 40px to clear the title -->
+  <g transform="translate(0, 40)">
+  
+  <!-- ===== RAW CORPUS ===== -->
+  <rect x="20" y="80" width="130" height="60" rx="8" fill="#F0F4F8" stroke="#2E4057" stroke-width="2"/>
+  <text x="85" y="103" text-anchor="middle" font-size="11" fill="#1A1A2E" font-weight="bold">Raw DetectRL</text>
+  <text x="85" y="119" text-anchor="middle" font-size="10" fill="#555">744,912 rows</text>
+  <text x="85" y="133" text-anchor="middle" font-size="9" fill="#888">(Hugging Face Hub)</text>
+
+  <!-- Arrow to filter -->
+  <line x1="150" y1="110" x2="188" y2="110" stroke="#2E4057" stroke-width="1.8" marker-end="url(#arrow-navy)"/>
+
+  <!-- ===== FILTER STAGE ===== -->
+  <rect x="190" y="80" width="130" height="60" rx="8" fill="#FFF8EC" stroke="#EF7B45" stroke-width="2"/>
+  <text x="255" y="102" text-anchor="middle" font-size="11" fill="#EF7B45" font-weight="bold">Filter Stage</text>
+  <text x="255" y="117" text-anchor="middle" font-size="9" fill="#888">Remove:</text>
+  <text x="255" y="129" text-anchor="middle" font-size="9" fill="#D64045">spelling_error · data_mixing</text>
+
+  <!-- TC1 badge -->
+  <rect x="217" y="70" width="76" height="13" rx="3" fill="#EF7B45"/>
+  <text x="255" y="80" text-anchor="middle" font-size="9" fill="white" font-weight="bold">TC1: 3.58x speedup</text>
+
+  <!-- Arrow to filtered corpus -->
+  <line x1="320" y1="110" x2="358" y2="110" stroke="#2E4057" stroke-width="1.8" marker-end="url(#arrow-navy)"/>
+
+  <!-- ===== FILTERED CORPUS ===== -->
+  <rect x="360" y="80" width="130" height="60" rx="8" fill="#F0F8FB" stroke="#54C6EB" stroke-width="2"/>
+  <text x="425" y="102" text-anchor="middle" font-size="11" fill="#1A1A2E" font-weight="bold">Filtered Corpus</text>
+  <text x="425" y="118" text-anchor="middle" font-size="10" fill="#555">~235,200 samples</text>
+  <text x="425" y="132" text-anchor="middle" font-size="9" fill="#888">6 attack types retained</text>
+
+  <!-- Orthogonal Branching arrows: up (seen) and down (unseen) -->
+  <path d="M 490 110 L 515 110 L 515 67 L 538 67" fill="none" stroke="#048A81" stroke-width="1.8" marker-end="url(#arrow-teal)"/>
+  <path d="M 490 110 L 515 110 L 515 195 L 538 195" fill="none" stroke="#2E4057" stroke-width="1.8" marker-end="url(#arrow-navy)"/>
+
+  <!-- ===== SEEN POOL ===== -->
+  <rect x="540" y="20" width="180" height="95" rx="8" fill="#E8F5F0" stroke="#048A81" stroke-width="2"/>
+  <text x="630" y="42" text-anchor="middle" font-size="12" fill="#048A81" font-weight="bold">SEEN POOL</text>
+  <text x="630" y="58" text-anchor="middle" font-size="10" fill="#1A1A2E">120,000 samples (balanced)</text>
+  <text x="630" y="72" text-anchor="middle" font-size="9" fill="#444">direct_prompt (clean AI)</text>
+  <text x="630" y="85" text-anchor="middle" font-size="9" fill="#444">adversarial_character_llm</text>
+  <text x="630" y="98" text-anchor="middle" font-size="9" fill="#444">adversarial_word_llm (×2 types)</text>
+
+  <!-- Arrow: seen pool -> split -->
+  <line x1="720" y1="67" x2="748" y2="67" stroke="#048A81" stroke-width="1.8" marker-end="url(#arrow-teal)"/>
+
+  <!-- ===== 80/10/10 SPLIT ===== -->
+  <rect x="750" y="20" width="100" height="98" rx="8" fill="#EAF9F5" stroke="#048A81" stroke-width="1.5"/>
+  <text x="800" y="42" text-anchor="middle" font-size="10" fill="#048A81" font-weight="bold">80/10/10 Split</text>
+  <rect x="760" y="50" width="80" height="18" rx="3" fill="#048A81" opacity="0.15"/>
+  <text x="800" y="63" text-anchor="middle" font-size="9" fill="#048A81" font-weight="bold">Train: 96,000</text>
+  <rect x="760" y="70" width="80" height="18" rx="3" fill="#048A81" opacity="0.10"/>
+  <text x="800" y="83" text-anchor="middle" font-size="9" fill="#048A81">Val: 12,000</text>
+  <rect x="760" y="90" width="80" height="18" rx="3" fill="#048A81" opacity="0.10"/>
+  <text x="800" y="103" text-anchor="middle" font-size="9" fill="#048A81">Seen Test: 12,000</text>
+
+  <!-- ===== UNSEEN POOL ===== -->
+  <rect x="540" y="140" width="180" height="110" rx="8" fill="#EEF0F8" stroke="#2E4057" stroke-width="2"/>
+  <text x="630" y="162" text-anchor="middle" font-size="12" fill="#2E4057" font-weight="bold">UNSEEN POOL</text>
+  <text x="630" y="178" text-anchor="middle" font-size="10" fill="#1A1A2E">~20,000 samples (balanced)</text>
+  <text x="630" y="193" text-anchor="middle" font-size="9" fill="#888">NEVER seen during training</text>
+  <line x1="558" y1="201" x2="713" y2="201" stroke="#CCC" stroke-width="0.8"/>
+  <text x="630" y="216" text-anchor="middle" font-size="9" fill="#444">paraphrase_back_translation_llm</text>
+  <text x="630" y="229" text-anchor="middle" font-size="9" fill="#444">paraphrase_polish_llm · paraphrase_dipper_llm</text>
+  <text x="630" y="242" text-anchor="middle" font-size="9" fill="#444">prompt_few_shot · prompt_sico</text>
+
+  <!-- Arrow: unseen pool -> eval only -->
+  <line x1="720" y1="195" x2="748" y2="195" stroke="#2E4057" stroke-width="1.8" marker-end="url(#arrow-navy)"/>
+
+  <rect x="750" y="165" width="100" height="60" rx="8" fill="#ECEDF8" stroke="#2E4057" stroke-width="1.5"/>
+  <text x="800" y="186" text-anchor="middle" font-size="10" fill="#2E4057" font-weight="bold">Eval Only</text>
+  <text x="800" y="202" text-anchor="middle" font-size="9" fill="#2E4057">10,000 samples</text>
+  <text x="800" y="213" text-anchor="middle" font-size="8" fill="#888">(capped at eval)</text>
+
+  <!-- ===== EXCLUDED ===== -->
+  <path d="M 255 140 L 255 175" fill="none" stroke="#AAA" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arrow-grey)"/>
+
+  <rect x="168" y="177" width="174" height="55" rx="6" fill="#F5F5F5" stroke="#CCCCCC" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="255" y="197" text-anchor="middle" font-size="10" fill="#999" font-weight="bold">EXCLUDED</text>
+  <text x="255" y="213" text-anchor="middle" font-size="9" fill="#AAA">spelling_error (label ambiguity)</text>
+  <text x="255" y="226" text-anchor="middle" font-size="9" fill="#AAA">data_mixing (binary incompatible)</text>
+
+  <!-- ===== DistilBERT TRAINING BOX ===== -->
+  <rect x="540" y="300" width="310" height="90" rx="10" fill="#EEF0F8" stroke="#2E4057" stroke-width="2"/>
+  <text x="695" y="323" text-anchor="middle" font-size="12" fill="#2E4057" font-weight="bold">DistilBERT Fine-Tuning</text>
+  <text x="695" y="339" text-anchor="middle" font-size="10" fill="#1A1A2E">96,000 train · 12,000 val · AdamW lr=2e-5 · batch=32 · 3 epochs</text>
+  <text x="695" y="355" text-anchor="middle" font-size="9" fill="#888">4 ablation configurations (baseline1, ablation_a, ablation_b, ablation_c)</text>
+  <text x="695" y="370" text-anchor="middle" font-size="9" fill="#888">Best-epoch checkpoint by validation F1</text>
+
+  <!-- Arrow from train split to training box (Routes between Unseen Pool and Eval Only) -->
+  <path d="M 800 118 L 800 135 L 735 135 L 735 295" fill="none" stroke="#048A81" stroke-width="1.8" stroke-dasharray="4,2" marker-end="url(#arrow-teal)"/>
+
+  <!-- ===== EVAL OUTPUTS ===== -->
+  <rect x="300" y="420" width="175" height="65" rx="8" fill="#EAF9F5" stroke="#048A81" stroke-width="1.5"/>
+  <text x="387" y="441" text-anchor="middle" font-size="11" fill="#048A81" font-weight="bold">Seen-Test Evaluation</text>
+  <text x="387" y="457" text-anchor="middle" font-size="9" fill="#444">12,000 samples · F1, ROC-AUC</text>
+  <text x="387" y="472" text-anchor="middle" font-size="9" fill="#444">Same distribution as training</text>
+
+  <rect x="540" y="420" width="175" height="65" rx="8" fill="#ECEDF8" stroke="#2E4057" stroke-width="1.5"/>
+  <text x="627" y="440" text-anchor="middle" font-size="11" fill="#2E4057" font-weight="bold">Unseen Cross-Attack Eval</text>
+  <text x="627" y="456" text-anchor="middle" font-size="9" fill="#444">10,000 samples · F1, ROC-AUC</text>
+  <text x="627" y="472" text-anchor="middle" font-size="9" fill="#444">RRD = (F1_seen - F1_unseen) / F1_seen</text>
+
+  <!-- Arrow from Trained Model to Seen-Test Eval -->
+  <path d="M 540 345 L 387 345 L 387 418" fill="none" stroke="#2E4057" stroke-width="1.8" marker-end="url(#arrow-navy)"/>
+  
+  <!-- Arrow from Trained Model to Unseen Eval -->
+  <path d="M 627 390 L 627 418" fill="none" stroke="#2E4057" stroke-width="1.8" marker-end="url(#arrow-navy)"/>
+
+  <!-- Data flow arrows to Eval boxes -->
+  <!-- From Test 12k to Seen-Test Eval (routes along right outer margin) -->
+  <path d="M 840 99 L 880 99 L 880 500 L 387 500 L 387 485" fill="none" stroke="#048A81" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <path d="M 387 495 L 387 485" fill="none" stroke="#048A81" stroke-width="1.5" marker-end="url(#arrow-teal)"/>
+  
+  <!-- From Eval Only to Unseen Eval (routes along right inner lane to avoid DistilBERT) -->
+  <path d="M 800 225 L 800 250 L 860 250 L 860 452 L 718 452" fill="none" stroke="#2E4057" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arrow-navy)"/>
+
+  </g>
+</svg>
+</div>
+<figcaption>
+  <b>Figure 2:</b> Dataset construction pipeline for the cross-attack generalisation study.
+  The raw DetectRL corpus (~744,912 rows) is processed by TC1 (parallel multi-stage preprocessing,
+  3.58x speedup) and filtered by removing <i>spelling_error</i> and <i>data_mixing</i> subsets (~235,200
+  samples retained across six attack types). The retained subsets are divided into a seen partition
+  (direct_prompt, homoglyph, and word substitution types; 120,000 balanced samples split 80/10/10 into
+  train/validation/seen-test) and an unseen partition (paraphrase and prompt-based adversarial types;
+  ~20,000 balanced samples held out entirely from training). Generalisation is evaluated by applying
+  the trained classifier to the unseen partition, and comparing performance via the Relative Robustness
+  Degradation (RRD) metric.
+</figcaption>
+</figure>
+
+<button id="export-btn" onclick="exportFig()">Export as PNG (300 DPI equivalent)</button>
+<script>
+function exportFig() {
+  html2canvas(document.getElementById('diagram-wrap'), {scale: 3, backgroundColor: '#ffffff'})
+    .then(canvas => {
+      const link = document.createElement('a');
+      link.download = 'figure2_split_pipeline.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+}
+</script>
+</body>
+</html>

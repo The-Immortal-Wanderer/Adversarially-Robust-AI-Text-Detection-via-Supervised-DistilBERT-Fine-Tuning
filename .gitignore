@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Environments
+.venv/
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Model checkpoints (large weight files)
+*.pt
+*.pth
+*.bin
+*.safetensors
+checkpoints/
+artifacts/**/*.pt
+
+# Data files (exclude ALL parquet — users download via scripts)
+*.parquet
+*.arrow
+data/raw/
+data/processed/
+
+# Keep data scripts in data/ (not excluded by the above)
+!data/*.py
+
+# Keep artifact summaries
+!artifacts/**/*.csv
+!artifacts/**/*.json
+!artifacts/**/*.txt
+
+# Cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Archives
+CodeFiles.zip
+
+# Internal planning (not for public)
+.sisyphus/
+.github/plans/
+
+# OS
+Thumbs.db
+.DS_Store

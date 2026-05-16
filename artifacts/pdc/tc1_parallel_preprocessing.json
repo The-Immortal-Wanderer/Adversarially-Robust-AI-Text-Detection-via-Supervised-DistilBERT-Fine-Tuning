@@ -1,0 +1,14 @@
+{
+  "n_workers": 11,
+  "total_logical_cores": 12,
+  "raw_rows_loaded": 744912,
+  "load_time_s": 3.66,
+  "sequential_filter_time_s": 31.83,
+  "parallel_filter_time_s": 8.89,
+  "speedup_vs_sequential": 3.5804,
+  "original_download_time_s": 9000.0,
+  "speedup_vs_original": 1012.3735,
+  "pool_build_time_s": 0.04,
+  "train_pool_rows": 0,
+  "unseen_pool_rows": 0
+}

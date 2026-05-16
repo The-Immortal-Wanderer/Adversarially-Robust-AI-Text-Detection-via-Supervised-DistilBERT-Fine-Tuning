@@ -1,0 +1,1 @@
+"""Source package for AI-Generated Text Detection — DistilBERT Ablation Study."""

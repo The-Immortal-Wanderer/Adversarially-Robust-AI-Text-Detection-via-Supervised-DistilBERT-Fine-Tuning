@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<!-- FIGURE 1 — DistilBERT Classifier Architecture Diagram -->
+<!-- Placement: Section 3.2 (Model Architecture) -->
+<!-- Caption: Figure 1: Architecture of the DistilBERT-based binary classifier. The
+     encoder backbone (distilbert-base-uncased, 66M parameters) produces a
+     768-dimensional [CLS] representation. Embeddings and lower transformer layers
+     (shaded, labeled F) are frozen in partially-frozen configurations; upper layers
+     (labeled T) are trainable in all configurations. Two classification head variants
+     are studied: a single-layer head (baseline1, ablation_a) and a deep head with a
+     384-dimensional bottleneck and GELU activation (ablation_b, ablation_c). -->
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Figure 1 — DistilBERT Architecture</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #fff; font-family: 'Times New Roman', Times, serif; padding: 20px; }
+  #diagram-wrap { display: inline-block; background: #fff; padding: 24px 32px; border: 1px solid #ddd; }
+  svg text { font-family: 'Times New Roman', Times, serif; }
+  #export-btn {
+    margin-top: 14px; padding: 8px 22px; background: #2E4057; color: #fff;
+    border: none; cursor: pointer; font-family: inherit; font-size: 13px;
+    border-radius: 3px; display: block;
+  }
+  #export-btn:hover { background: #048A81; }
+  figcaption {
+    margin-top: 12px; font-size: 12px; color: #333; max-width: 760px;
+    line-height: 1.5; font-style: italic;
+  }
+</style>
+</head>
+<body>
+<figure>
+<div id="diagram-wrap">
+<svg id="arch-svg" width="880" height="480" viewBox="0 0 880 480" xmlns="http://www.w3.org/2000/svg" font-family="Times New Roman, serif">
+  <defs>
+    <marker id="arrow-navy" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#2E4057"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#048A81"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="440" y="30" text-anchor="middle" font-size="14" fill="#1A1A2E" font-weight="bold">
+    Figure 1: DistilBERT Binary Classifier Architecture
+  </text>
+  <text x="440" y="48" text-anchor="middle" font-size="10" fill="#666666">
+    distilbert-base-uncased (66M parameters) · Four ablation configurations
+  </text>
+
+  <!-- ===== INPUT ===== -->
+  <rect x="20" y="210" width="90" height="44" rx="6" fill="#F0F4F8" stroke="#2E4057" stroke-width="1.5"/>
+  <text x="65" y="227" text-anchor="middle" font-size="11" fill="#1A1A2E">Input Text</text>
+  <text x="65" y="243" text-anchor="middle" font-size="10" fill="#555">max_len=256</text>
+
+  <!-- Arrow: input -> embedding -->
+  <path d="M 110 232 L 135 232" stroke="#2E4057" stroke-width="1.5" marker-end="url(#arrow-navy)"/>
+
+  <!-- ===== EMBEDDING LAYER (always frozen) ===== -->
+  <rect x="140" y="200" width="110" height="64" rx="6" fill="#F0F8FB" stroke="#54C6EB" stroke-width="2" stroke-dasharray="4,2"/>
+  <text x="195" y="221" text-anchor="middle" font-size="11" fill="#1A1A2E" font-weight="bold">Embedding</text>
+  <text x="195" y="237" text-anchor="middle" font-size="10" fill="#555">WordPiece</text>
+  <text x="195" y="252" text-anchor="middle" font-size="10" fill="#555">30,522 vocab</text>
+
+  <!-- Arrow: embedding -> layers -->
+  <path d="M 250 232 L 275 232" stroke="#2E4057" stroke-width="1.5" marker-end="url(#arrow-navy)"/>
+
+  <!-- ===== TRANSFORMER LAYERS 0-3 (Frozen in a/b) ===== -->
+  <rect x="280" y="130" width="130" height="204" rx="8" fill="#FDF0F0" stroke="#D64045" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.8"/>
+  <text x="345" y="152" text-anchor="middle" font-size="11" fill="#D64045" font-weight="bold">Layers 0–3</text>
+  <text x="345" y="167" text-anchor="middle" font-size="9" fill="#D64045">Frozen (ablation_a, b)</text>
+  
+  <rect x="295" y="177" width="100" height="28" rx="4" fill="#F8E0E0" stroke="#D64045" stroke-width="1"/>
+  <text x="345" y="195" text-anchor="middle" font-size="10" fill="#333">Transformer L0</text>
+  
+  <rect x="295" y="213" width="100" height="28" rx="4" fill="#F8E0E0" stroke="#D64045" stroke-width="1"/>
+  <text x="345" y="231" text-anchor="middle" font-size="10" fill="#333">Transformer L1</text>
+  
+  <rect x="295" y="249" width="100" height="28" rx="4" fill="#F8E0E0" stroke="#D64045" stroke-width="1"/>
+  <text x="345" y="267" text-anchor="middle" font-size="10" fill="#333">Transformer L2</text>
+  
+  <rect x="295" y="285" width="100" height="28" rx="4" fill="#F8E0E0" stroke="#D64045" stroke-width="1"/>
+  <text x="345" y="303" text-anchor="middle" font-size="10" fill="#333">Transformer L3</text>
+
+  <text x="345" y="325" text-anchor="middle" font-size="9" fill="#888">Trainable (baseline1, c)</text>
+
+  <!-- Arrow: layers 0-3 -> layers 4-5 -->
+  <path d="M 410 232 L 435 232" stroke="#2E4057" stroke-width="1.5" marker-end="url(#arrow-navy)"/>
+
+  <!-- ===== TRANSFORMER LAYERS 4-5 (Always trainable) ===== -->
+  <rect x="440" y="130" width="130" height="204" rx="8" fill="#E8F5F0" stroke="#048A81" stroke-width="1.5" opacity="0.8"/>
+  <text x="505" y="152" text-anchor="middle" font-size="11" fill="#048A81" font-weight="bold">Layers 4–5</text>
+  <text x="505" y="167" text-anchor="middle" font-size="9" fill="#048A81">Trainable (all configs)</text>
+  
+  <rect x="455" y="213" width="100" height="28" rx="4" fill="#C8EAE0" stroke="#048A81" stroke-width="1"/>
+  <text x="505" y="231" text-anchor="middle" font-size="10" fill="#333">Transformer L4</text>
+  
+  <rect x="455" y="249" width="100" height="28" rx="4" fill="#C8EAE0" stroke="#048A81" stroke-width="1"/>
+  <text x="505" y="267" text-anchor="middle" font-size="10" fill="#333">Transformer L5</text>
+
+  <!-- Arrow: layers 4-5 -> CLS -->
+  <path d="M 570 232 L 595 232" stroke="#2E4057" stroke-width="1.5" marker-end="url(#arrow-navy)"/>
+
+  <!-- ===== CLS TOKEN ===== -->
+  <rect x="600" y="204" width="80" height="56" rx="6" fill="#F0F8FB" stroke="#54C6EB" stroke-width="2"/>
+  <text x="640" y="227" text-anchor="middle" font-size="12" fill="#1A1A2E" font-weight="bold">[CLS]</text>
+  <text x="640" y="243" text-anchor="middle" font-size="10" fill="#555">768-dim</text>
+  <text x="640" y="255" text-anchor="middle" font-size="9" fill="#888">vector</text>
+
+  <!-- ===== HEAD VARIANT SPLIT ===== -->
+  <!-- Orthogonal Arrow up to single head -->
+  <path d="M 680 225 L 695 225 L 695 108 L 715 108" fill="none" stroke="#2E4057" stroke-width="1.5" marker-end="url(#arrow-navy)"/>
+  <!-- Orthogonal Arrow down to deep head -->
+  <path d="M 680 239 L 695 239 L 695 323 L 715 323" fill="none" stroke="#048A81" stroke-width="1.5" marker-end="url(#arrow-teal)"/>
+
+  <!-- ===== SINGLE HEAD (baseline1, ablation_a) ===== -->
+  <!-- Color: Navy (Baseline) -->
+  <rect x="720" y="50" width="140" height="140" rx="8" fill="#EEF0F8" stroke="#2E4057" stroke-width="2"/>
+  <text x="790" y="72" text-anchor="middle" font-size="11" fill="#2E4057" font-weight="bold">Single Head</text>
+  <text x="790" y="87" text-anchor="middle" font-size="9" fill="#888">(baseline1, ablation_a)</text>
+
+  <rect x="735" y="96" width="110" height="24" rx="4" fill="#C8CDE8" stroke="#2E4057" stroke-width="1"/>
+  <text x="790" y="112" text-anchor="middle" font-size="10" fill="#333">Dropout (p=0.3)</text>
+
+  <path d="M 790 120 L 790 132" stroke="#2E4057" stroke-width="1.2"/>
+
+  <rect x="735" y="132" width="110" height="24" rx="4" fill="#C8CDE8" stroke="#2E4057" stroke-width="1"/>
+  <text x="790" y="148" text-anchor="middle" font-size="10" fill="#333">Linear (768 → 2)</text>
+
+  <path d="M 790 156 L 790 168" stroke="#2E4057" stroke-width="1.2"/>
+
+  <!-- Softmax -->
+  <rect x="740" y="168" width="100" height="14" rx="3" fill="#2E4057" opacity="0.15"/>
+  <text x="790" y="179" text-anchor="middle" font-size="9" fill="#2E4057">Softmax → P(AI)</text>
+
+  <!-- ===== DEEP HEAD (ablation_b, ablation_c) ===== -->
+  <!-- Color: Teal (Proposed / Better) -->
+  <rect x="720" y="265" width="140" height="205" rx="8" fill="#E8F5F0" stroke="#048A81" stroke-width="2"/>
+  <text x="790" y="287" text-anchor="middle" font-size="11" fill="#048A81" font-weight="bold">Deep Head</text>
+  <text x="790" y="302" text-anchor="middle" font-size="9" fill="#888">(ablation_b, ablation_c)</text>
+
+  <rect x="735" y="312" width="110" height="22" rx="4" fill="#C8EAE0" stroke="#048A81" stroke-width="1"/>
+  <text x="790" y="327" text-anchor="middle" font-size="10" fill="#333">Dropout (p=0.3)</text>
+
+  <path d="M 790 334 L 790 344" stroke="#048A81" stroke-width="1.2"/>
+
+  <rect x="735" y="344" width="110" height="22" rx="4" fill="#C8EAE0" stroke="#048A81" stroke-width="1"/>
+  <text x="790" y="359" text-anchor="middle" font-size="10" fill="#333">Linear (768 → 384)</text>
+
+  <path d="M 790 366 L 790 376" stroke="#048A81" stroke-width="1.2"/>
+
+  <rect x="735" y="376" width="110" height="22" rx="4" fill="#C8EAE0" stroke="#048A81" stroke-width="1"/>
+  <text x="790" y="391" text-anchor="middle" font-size="10" fill="#333">GELU Activation</text>
+
+  <path d="M 790 398 L 790 408" stroke="#048A81" stroke-width="1.2"/>
+
+  <rect x="735" y="408" width="110" height="22" rx="4" fill="#C8EAE0" stroke="#048A81" stroke-width="1"/>
+  <text x="790" y="423" text-anchor="middle" font-size="10" fill="#333">Dropout (p=0.2)</text>
+
+  <path d="M 790 430 L 790 440" stroke="#048A81" stroke-width="1.2"/>
+
+  <rect x="735" y="440" width="110" height="16" rx="3" fill="#048A81" opacity="0.15"/>
+  <text x="790" y="452" text-anchor="middle" font-size="9" fill="#048A81">Linear(384→2) → Softmax</text>
+
+  <!-- ===== LEGEND ===== -->
+  <rect x="20" y="385" width="240" height="70" rx="6" fill="#F9F9F9" stroke="#DDD" stroke-width="1"/>
+  <text x="30" y="403" font-size="11" fill="#1A1A2E" font-weight="bold" text-anchor="start">Legend</text>
+  <rect x="30" y="410" width="14" height="10" rx="2" fill="#FDF0F0" stroke="#D64045" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="50" y="419" font-size="10" fill="#333" text-anchor="start">Frozen in ablation_a / ablation_b</text>
+  <rect x="30" y="427" width="14" height="10" rx="2" fill="#E8F5F0" stroke="#048A81" stroke-width="1.5"/>
+  <text x="50" y="436" font-size="10" fill="#333" text-anchor="start">Always trainable</text>
+  <rect x="30" y="444" width="14" height="10" rx="2" fill="#F0F8FB" stroke="#54C6EB" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="50" y="453" font-size="10" fill="#333" text-anchor="start">Always frozen (all configs)</text>
+
+</svg>
+</div>
+<figcaption>
+  <b>Figure 1:</b> Architecture of the DistilBERT-based binary classifier.
+  The encoder backbone (distilbert-base-uncased, 66M parameters) produces a 768-dimensional
+  [CLS] representation. Embeddings and transformer layers 0–3 (dashed red border) are
+  frozen in partially-frozen configurations (ablation_a, ablation_b); all layers are trainable
+  in fully fine-tuned configurations (baseline1, ablation_c). Two classification head variants are
+  studied: a single-layer head with Dropout(0.3) followed by Linear(768→2) (baseline1, ablation_a),
+  and a deep head with an additional 384-dimensional bottleneck, GELU activation, and second dropout
+  stage (ablation_b, ablation_c).
+</figcaption>
+</figure>
+
+<button id="export-btn" onclick="exportFig()">Export as PNG (300 DPI equivalent)</button>
+<script>
+function exportFig() {
+  html2canvas(document.getElementById('diagram-wrap'), {scale: 3, backgroundColor: '#ffffff'})
+    .then(canvas => {
+      const link = document.createElement('a');
+      link.download = 'figure1_architecture.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    });
+}
+</script>
+</body>
+</html>
