@@ -170,7 +170,7 @@ If you use this code or findings in your research, please cite the associated pa
   title={Towards Adversarially Robust {AI} Text Detection via Supervised {DistilBERT} Fine-Tuning: A Cross-Attack Generalization Study on {DetectRL}},
   author={Masood, Hammad and Rafay, Abdul},
   booktitle={Proceedings of the...},
-  year={2025},
+  year={2026},
   note={In preparation for IEEE submission}
 }
 ```
