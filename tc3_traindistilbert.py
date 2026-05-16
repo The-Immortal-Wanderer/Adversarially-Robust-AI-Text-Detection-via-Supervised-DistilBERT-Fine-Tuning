@@ -1,5 +1,5 @@
 """
-train_distilbert_tc3.py — TC3 demo with AMP on DetectRL (ablation_b only)
+train_distilbert_tc3.py — RAID edition with AMP (TC3)
 
 This script implements Test Case 3: Automatic Mixed Precision (AMP).
 It enables GradScaler and autocast to reduce VRAM usage and speed up training.
@@ -49,6 +49,14 @@ SAMPLES_PER_CLASS = 60_000
 UNSEEN_CAP = 10_000
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+import argparse
+
+_dataset_parser = argparse.ArgumentParser()
+_dataset_parser.add_argument("--dataset", choices=["raid", "detectrl"], default="raid",
+                    help="Dataset: raid or detectrl (default: raid)")
+_dataset_args, _remaining = _dataset_parser.parse_known_args()
+DATASET = _dataset_args.dataset
 
 # ── Reproducibility ───────────────────────────────────────────────────────────
 def seed_everything(seed: int = SEED) -> None:
@@ -257,13 +265,13 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_NAME)
 
     # ── Dataset Loading ──────────────────────────────────────
-    train_parquet = PROCESSED_DIR / "train_pool_capped.parquet"
+    train_parquet = PROCESSED_DIR / f"{DATASET}_train_pool_capped.parquet"
     if not train_parquet.exists():
         raise FileNotFoundError(f"Run original script first to create {train_parquet}")
 
     df_capped = pd.read_parquet(train_parquet)
-    train_cache = CACHE_DIR / f"train_pool_capped_{MAX_LENGTH}.pt"
-    unseen_cache = CACHE_DIR / f"test_unseen_10k_{MAX_LENGTH}.pt"
+    train_cache = CACHE_DIR / f"{DATASET}_train_pool_capped_{MAX_LENGTH}.pt"
+    unseen_cache = CACHE_DIR / f"{DATASET}_test_unseen_10k_{MAX_LENGTH}.pt"
 
     pretokenize(df_capped, tokenizer, train_cache)
 
@@ -294,7 +302,7 @@ def main() -> None:
     print(f"[TC3 RESULT] Peak VRAM: {torch.cuda.max_memory_allocated(DEVICE)/1024**2:.2f} MB")
     
     # Save Artifact
-    ckpt_path = ARTIFACT_DIR / "ablation_b_tc3_best_fp32.pt"
+    ckpt_path = ARTIFACT_DIR / f"{DATASET}_ablation_b_tc3_best_fp32.pt"
     torch.save(result, ckpt_path)
     print(f"TC3 artifact saved to {ckpt_path}")
 

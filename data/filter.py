@@ -317,8 +317,8 @@ def main(args: argparse.Namespace | None = None) -> None:
     print("\n" + "=" * 60)
     print("Saving pools")
     print("=" * 60)
-    save_dataset(train_pool,       args.processed_dir / "train_pool.parquet")
-    save_dataset(test_unseen_pool, args.processed_dir / "test_unseen.parquet")
+    save_dataset(train_pool,       args.processed_dir / "detectrl_train_pool.parquet")
+    save_dataset(test_unseen_pool, args.processed_dir / "detectrl_test_unseen.parquet")
 
     print(f"\nDone!")
     print(f"  train_pool      : {len(train_pool):,} rows")

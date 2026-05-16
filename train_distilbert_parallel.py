@@ -1,5 +1,5 @@
 """
-train_distilbert_parallel.py — Parallel-optimized DetectRL training
+train_distilbert_parallel.py — RAID edition
 
 Full training pipeline for the cross-generator generalisation study.
 Designed to run as a plain Python script (not a notebook) so that
@@ -86,6 +86,14 @@ SAMPLES_PER_CLASS = 60_000   # 60k human + 60k AI = 120k total
 UNSEEN_CAP        = 10_000   # keep evaluation fast
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+import argparse
+
+_dataset_parser = argparse.ArgumentParser()
+_dataset_parser.add_argument("--dataset", choices=["raid", "detectrl"], default="raid",
+                    help="Dataset: raid or detectrl (default: raid)")
+_dataset_args, _remaining = _dataset_parser.parse_known_args()
+DATASET = _dataset_args.dataset
 
 
 # ── Reproducibility ───────────────────────────────────────────────────────────
@@ -372,8 +380,8 @@ if __name__ == "__main__":
         del m
 
     # ── Prepare capped training parquet ──────────────────────────────────────
-    train_parquet  = PROCESSED_DIR / "train_pool.parquet"
-    capped_parquet = PROCESSED_DIR / "train_pool_capped.parquet"
+    train_parquet  = PROCESSED_DIR / f"{DATASET}_train_pool.parquet"
+    capped_parquet = PROCESSED_DIR / f"{DATASET}_train_pool_capped.parquet"
 
     if not capped_parquet.exists():
         print("\nPreparing capped dataset…", flush=True)
@@ -393,7 +401,7 @@ if __name__ == "__main__":
         print(f"Capped dataset found: {len(df_capped):,} rows", flush=True)
 
     # ── Prepare unseen parquet ────────────────────────────────────────────────
-    unseen_parquet = PROCESSED_DIR / "test_unseen.parquet"
+    unseen_parquet = PROCESSED_DIR / f"{DATASET}_test_unseen.parquet"
     df_unseen      = pd.read_parquet(unseen_parquet)
     n_unseen = min(
         UNSEEN_CAP // 2,
@@ -504,14 +512,14 @@ if __name__ == "__main__":
     best_name = summary_df.sort_values("best_val_f1", ascending=False).iloc[0]["ablation_name"]
 
     for name, result in results.items():
-        ckpt_path = ARTIFACT_DIR / f"{name}_best.pt"
+        ckpt_path = ARTIFACT_DIR / f"{DATASET}_{name}_best.pt"
         torch.save(result, ckpt_path)
         print(f"Saved: {ckpt_path}", flush=True)
 
-    with open(ARTIFACT_DIR / "training_times.json", "w", encoding="utf-8") as f:
+    with open(ARTIFACT_DIR / f"{DATASET}_training_times.json", "w", encoding="utf-8") as f:
         json.dump(training_times, f, indent=2)
 
-    with open(ARTIFACT_DIR / "best_config.json", "w", encoding="utf-8") as f:
+    with open(ARTIFACT_DIR / f"{DATASET}_best_config.json", "w", encoding="utf-8") as f:
         json.dump({
             "best_ablation_name": best_name,
             "config":             results[best_name]["config"],
@@ -519,8 +527,8 @@ if __name__ == "__main__":
         }, f, indent=2)
 
     tokenizer_save = AutoTokenizer.from_pretrained(TOKENIZER_NAME)
-    tokenizer_save.save_pretrained(ARTIFACT_DIR)
-    summary_df.to_csv(ARTIFACT_DIR / "summary.csv", index=False)
+    tokenizer_save.save_pretrained(ARTIFACT_DIR / DATASET)
+    summary_df.to_csv(ARTIFACT_DIR / f"{DATASET}_summary.csv", index=False)
 
     print(f"\nAll artifacts saved to {ARTIFACT_DIR}", flush=True)
     print(f"Best ablation: {best_name}", flush=True)

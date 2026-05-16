@@ -51,6 +51,14 @@ NUM_WORKERS    = 4
 PIN_MEMORY     = torch.cuda.is_available()
 TOKENIZER_NAME = "distilbert-base-uncased"
 
+import argparse
+
+_dataset_parser = argparse.ArgumentParser()
+_dataset_parser.add_argument("--dataset", choices=["raid", "detectrl"], default="detectrl",
+                    help="Dataset: raid or detectrl (default: detectrl)")
+_dataset_args, _remaining = _dataset_parser.parse_known_args()
+DATASET = _dataset_args.dataset
+
 
 def seed_everything(seed: int = SEED) -> None:
     random.seed(seed)
@@ -299,7 +307,7 @@ if __name__ == "__main__":
 
     # Cap dataset to 60k (30k human + 30k AI)
     print("\nPreparing capped dataset...", flush=True)
-    df        = pd.read_parquet("data/processed/train_pool.parquet")
+    df        = pd.read_parquet(f"data/processed/{DATASET}_train_pool.parquet")
     df_human  = df[df["label"] == 0].sample(n=60000, random_state=42)
     df_ai     = df[df["label"] == 1].sample(n=60000, random_state=42)
     df_capped = (
@@ -307,7 +315,7 @@ if __name__ == "__main__":
         .sample(frac=1, random_state=42)
         .reset_index(drop=True)
     )
-    df_capped.to_parquet("data/processed/train_pool_capped.parquet", index=False)
+    df_capped.to_parquet(f"data/processed/{DATASET}_train_pool_capped.parquet", index=False)
     print(f"Capped dataset saved: {len(df_capped)} rows", flush=True)
     print(df_capped["label"].value_counts(), flush=True)
 
@@ -353,17 +361,17 @@ if __name__ == "__main__":
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     pretokenize_parquet(
-        PROCESSED_DIR / "train_pool_capped.parquet",
-        CACHE_DIR / "train_pool_capped_256.pt",
+        PROCESSED_DIR / f"{DATASET}_train_pool_capped.parquet",
+        CACHE_DIR / f"{DATASET}_train_pool_capped_256.pt",
     )
     pretokenize_parquet(
-        PROCESSED_DIR / "test_unseen.parquet",
-        CACHE_DIR / "test_unseen_10k_256.pt",
+        PROCESSED_DIR / f"{DATASET}_test_unseen.parquet",
+        CACHE_DIR / f"{DATASET}_test_unseen_10k_256.pt",
         max_samples=10000,
     )
 
     # ── Split train into train/val/test 80/10/10 ──────────────────────────────
-    full_ds    = CachedTensorDataset(CACHE_DIR / "train_pool_capped_256.pt")
+    full_ds    = CachedTensorDataset(CACHE_DIR / f"{DATASET}_train_pool_capped_256.pt")
     n          = len(full_ds)
     n_train    = int(0.8 * n)
     n_val      = int(0.1 * n)
@@ -396,7 +404,7 @@ if __name__ == "__main__":
     val_loader   = make_loader(val_ds,   shuffle=False)
     test_loader  = make_loader(test_ds,  shuffle=False)
 
-    unseen_ds     = CachedTensorDataset(CACHE_DIR / "test_unseen_10k_256.pt")
+    unseen_ds     = CachedTensorDataset(CACHE_DIR / f"{DATASET}_test_unseen_10k_256.pt")
     unseen_loader = make_loader(unseen_ds, shuffle=False)
 
     print(f"train_loader : {len(train_loader)} batches", flush=True)
@@ -449,14 +457,14 @@ if __name__ == "__main__":
     best_result        = results[best_ablation_name]
 
     for name, result in results.items():
-        checkpoint_path = ARTIFACT_DIR / f"{name}_best.pt"
+        checkpoint_path = ARTIFACT_DIR / f"{DATASET}_{name}_best.pt"
         torch.save(result, checkpoint_path)
         print(f"Saved: {checkpoint_path}", flush=True)
 
-    with open(ARTIFACT_DIR / "training_times.json", "w", encoding="utf-8") as f:
+    with open(ARTIFACT_DIR / f"{DATASET}_training_times.json", "w", encoding="utf-8") as f:
         json.dump(training_times, f, indent=2)
 
-    with open(ARTIFACT_DIR / "best_config.json", "w", encoding="utf-8") as f:
+    with open(ARTIFACT_DIR / f"{DATASET}_best_config.json", "w", encoding="utf-8") as f:
         json.dump(
             {
                 "best_ablation_name": best_ablation_name,
@@ -467,6 +475,6 @@ if __name__ == "__main__":
             indent=2,
         )
 
-    tokenizer.save_pretrained(ARTIFACT_DIR)
+    tokenizer.save_pretrained(ARTIFACT_DIR / DATASET)
     print(f"\nBest ablation : {best_ablation_name}", flush=True)
     print(f"All artifacts saved to : {ARTIFACT_DIR}", flush=True)

@@ -259,8 +259,8 @@ def main() -> None:
     unseen_pool = _build_unseen_pool(filtered_df)
 
     args.processed_dir.mkdir(parents=True, exist_ok=True)
-    train_path = args.processed_dir / "train_pool.parquet"
-    unseen_path = args.processed_dir / "test_unseen.parquet"
+    train_path = args.processed_dir / "raid_train_pool.parquet"
+    unseen_path = args.processed_dir / "raid_test_unseen.parquet"
 
     train_pool.to_parquet(train_path, index=False)
     unseen_pool.to_parquet(unseen_path, index=False)
