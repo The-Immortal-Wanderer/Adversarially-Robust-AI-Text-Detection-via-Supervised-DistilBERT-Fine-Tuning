@@ -1,5 +1,5 @@
 """
-train_distilbert_tc3.py — RAID edition with AMP (TC3)
+train_distilbert_tc3.py — TC3 demo with AMP on DetectRL (ablation_b only)
 
 This script implements Test Case 3: Automatic Mixed Precision (AMP).
 It enables GradScaler and autocast to reduce VRAM usage and speed up training.
@@ -177,7 +177,7 @@ def run_epoch(
             
             # --- START AMP (TC3) ---
             #with torch.cuda.amp.autocast(enabled=use_amp):
-            with torch.cuda.amp.autocast(enabled=False):
+            with torch.cuda.amp.autocast(enabled=True):
                 logits = model(batch["input_ids"], batch["attention_mask"])
                 loss   = criterion(logits, batch["labels"])
 
@@ -219,7 +219,7 @@ def train_model(
     
     # Initialize Scaler for TC3
     #scaler = torch.cuda.amp.GradScaler(enabled=(DEVICE.type == "cuda"))
-    scaler = torch.cuda.amp.GradScaler(enabled=False)
+    scaler = torch.cuda.amp.GradScaler(enabled=True)
 
     best_val_f1 = -1.0
     best_state, history = None, []

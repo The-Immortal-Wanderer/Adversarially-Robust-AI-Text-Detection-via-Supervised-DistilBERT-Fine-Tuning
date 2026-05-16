@@ -1,5 +1,5 @@
 """
-train_distilbert.py — RAID edition
+train_distilbert_parallel.py — Parallel-optimized DetectRL training
 
 Full training pipeline for the cross-generator generalisation study.
 Designed to run as a plain Python script (not a notebook) so that
@@ -21,7 +21,7 @@ TC2 PARALLEL TOKENIZATION:
 
 Usage
 -----
-    python train_distilbert.py
+    python train_distilbert_parallel.py
 
 Outputs (all saved to artifacts/distilbert_detector/)
 ------------------------------------------------------

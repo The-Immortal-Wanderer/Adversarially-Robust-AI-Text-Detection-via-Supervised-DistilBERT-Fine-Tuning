@@ -166,7 +166,7 @@ All experiments were conducted on:
 If you use this code or findings in your research, please cite the associated paper:
 
 ```bibtex
-@inproceedings{masood2025towards,
+@inproceedings{masood2026towards,
   title={Towards Adversarially Robust {AI} Text Detection via Supervised {DistilBERT} Fine-Tuning: A Cross-Attack Generalization Study on {DetectRL}},
   author={Masood, Hammad and Rafay, Abdul},
   booktitle={Proceedings of the...},
