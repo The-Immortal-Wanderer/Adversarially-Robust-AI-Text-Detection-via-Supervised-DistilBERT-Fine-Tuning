@@ -6,7 +6,17 @@ from transformers import DistilBertModel
 
 # -- Config --
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-CHECKPOINT_PATH = Path("artifacts/distilbert_detector_tc3/ablation_b_tc3_best.pt")
+POSSIBLE_PATHS = [
+    Path("artifacts/distilbert_detector_tc3/raid_ablation_b_tc3_best_fp32.pt"),
+    Path("artifacts/distilbert_detector_tc3/ablation_b_tc3_best.pt"),
+    Path("artifacts/distilbert_detector_tc3/raid_ablation_b_tc3_best.pt"),
+]
+CHECKPOINT_PATH = None
+for p in POSSIBLE_PATHS:
+    if p.exists():
+        CHECKPOINT_PATH = p
+        break
+
 TOKENIZER_NAME  = "distilbert-base-uncased"
 BATCH_SIZE = 32 # Increased to 32 to actually stress the RTX 3050
 SEQ_LENGTH = 256
@@ -25,6 +35,11 @@ class DistilBertClassifier(nn.Module):
             self.classifier = nn.Sequential(
                 nn.Dropout(0.3), nn.Linear(hidden, 384), nn.GELU(), nn.Dropout(0.2), nn.Linear(384, 2)
             )
+        self._freeze_layers()
+
+    def _freeze_layers(self) -> None:
+        for param in self.distilbert.parameters():
+            param.requires_grad = False
 
     def forward(self, input_ids, attention_mask):
         out = self.distilbert(input_ids=input_ids, attention_mask=attention_mask)
@@ -54,8 +69,10 @@ def benchmark(model, input_ids, mask, description="Model"):
     return avg_latency
 
 def main():
-    if not CHECKPOINT_PATH.exists():
-        print(f"Error: Could not find checkpoint at {CHECKPOINT_PATH}")
+    if CHECKPOINT_PATH is None:
+        print("Error: Could not find checkpoint in any of the candidate paths:")
+        for p in POSSIBLE_PATHS:
+            print(f"  - {p}")
         return
 
     print(f"Loading model on {DEVICE}...")
