@@ -1,5 +1,5 @@
 \documentclass[conference]{IEEEtran}
-\IEEEoverridecommandlockouts
+%\IEEEoverridecommandlockouts
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
@@ -8,6 +8,7 @@
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{array}
+\usepackage{url}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
@@ -15,56 +16,53 @@
 \begin{document}
 
 \title{Towards Adversarially Robust AI Text Detection via Supervised
-DistilBERT Fine-Tuning: A Cross-Attack Generalization Study on DetectRL%
-\thanks{Submitted in partial fulfilment of coursework requirements.}}
+DistilBERT Fine-Tuning: A Held-Out-Generator Study on RAID}
 
 \author{%
-\IEEEauthorblockN{Hammad Masood}
+\IEEEauthorblockN{Hammad Masood Mirza}
 \IEEEauthorblockA{\textit{Dept. of Artificial Intelligence}\\
 \textit{FAST-NUCES, Islamabad}\\
 Islamabad, Pakistan\\
-23I-0127}
+madham123098@gmail.com}
 \and
-\IEEEauthorblockN{Abdul Rafay}
+\IEEEauthorblockN{Abdul Rafay Rashid}
 \IEEEauthorblockA{\textit{Dept. of Artificial Intelligence}\\
 \textit{FAST-NUCES, Islamabad}\\
 Islamabad, Pakistan\\
-23I-0117}}
+rafwas209@gmail.com}}
 
 \maketitle
 
 % ---------------------------------------------------------------
 \begin{abstract}
-We investigate cross-attack generalisation of adversarially augmented
-DistilBERT-based AI text detection at consumer-GPU scale. A binary
-classifier is fine-tuned on the DetectRL benchmark using character-level
-attack types (homoglyph substitution, word substitution) and evaluated on
-mechanistically distinct semantic-level unseen attacks (paraphrase,
-prompt-based adversarial) withheld entirely from training. All four
-ablation configurations achieve Relative Robustness Degradation values
-between 1.1\% and 3.1\%, with unseen-split F1 ranging from 0.913 to
-0.927---well within the 5\% generalisation threshold---providing a positive
-empirical answer to whether adversarial augmentation generalises across the
-character-level/semantic-level attack divide at 66M parameter scale. An
-ablation study reveals that full encoder fine-tuning improves both
-in-distribution performance and cross-attack generalisation simultaneously,
-while deeper classification heads modestly trade generalisation for
-seen-set precision. Four parallel and distributed computing optimisations
+We investigate adversarially exposed supervised AI text detection under a
+held-out-generator evaluation protocol at consumer-GPU scale. A binary
+DistilBERT classifier is fine-tuned on a 120,000-sample balanced subset of
+RAID using AI text from seen generators and evaluated on a separate
+held-out-generator split containing stronger and commercially deployed model
+families. All four ablation configurations achieve Relative Robustness
+Degradation values between 1.1\% and 3.1\%, with held-out F1 ranging from
+0.913 to 0.927---well within our proposed 5\% generalisation threshold. The ablation
+study shows that the validation-selected configuration
+(configuration B) obtains the highest validation and seen-test F1, but
+not the strongest robustness profile: the fully unfrozen deep-head variant
+(configuration C) achieves the best held-out ROC-AUC and nearly tied
+held-out F1, while the single-head models achieve the lowest degradation.
+Four systems optimisations
 are implemented and benchmarked on a single RTX~3050 8~GB GPU: parallel
-preprocessing (3.58x speedup), optimised DataLoader pipeline, AMP training
-with enlarged batch size (3.32x speedup), and AMP inference mode (54.25\%
+preprocessing ($3.58\times$ speedup), optimised DataLoader pipeline, AMP training
+with enlarged batch size ($3.32\times$ speedup), and AMP inference mode (54.25\%
 latency reduction, 380.64 samples/second). As auxiliary contributions,
-Fast-DetectGPT is reproduced at AUROC 0.937 and extended with 4-bit NF4
-quantization on RAID adversarial subsets, establishing that
+Fast-DetectGPT is reproduced with AUROC 0.937 and extended with 4-bit NF4
+quantisation on RAID adversarial subsets, demonstrating that
 clean-benchmark performance degrades sharply under adversarial attack
 (AUROC 0.669--0.789), with homoglyph substitution substantially more
-destructive than paraphrase rewriting (gpt2-xl RRD: 50.12\%).
+destructive than paraphrase rewriting (gpt2-xl RRD: 33.40\%).
 \end{abstract}
 
 \begin{IEEEkeywords}
-adversarial robustness, AI text detection, DistilBERT, cross-attack
-generalisation, DetectRL, RAID, NF4 quantization, parallel and distributed
-computing
+adversarial robustness, AI text detection, DistilBERT, held-out-generator
+generalisation, RAID, NF4 quantisation, efficient inference
 \end{IEEEkeywords}
 
 % ---------------------------------------------------------------
@@ -75,7 +73,7 @@ text trivially producible at scale. This capability threatens domains dependent
 on content authenticity, particularly academia and journalism, where machine-generated
 submissions bypass standard verification. Human inspection fails; research shows
 people detect AI-generated text at rates barely above chance~\cite{ippolito2020}.
-Automated detection is therefore the only scalable response.
+Automated detection is therefore a critical scalable response.
 
 Two dominant paradigms have emerged for automated detection.
 \textbf{Zero-shot probability-based methods} such as Fast-DetectGPT~\cite{bao2024}
@@ -101,62 +99,61 @@ on one class of attacks produces models robust to a mechanistically distinct
 class---remains open in the literature.
 
 We investigate whether a DistilBERT-based~\cite{sanh2019} binary text
-classifier, fine-tuned on a stratified subset of the DetectRL
-benchmark~\cite{wu2024detectrl}, generalises robustness from character-level
-attacks seen during training to semantic-level attacks withheld from
-training. The experimental design is conservative: we train on homoglyph
-and word substitution attacks (character-level mechanisms) and evaluate
-on paraphrase and prompt-based adversarial attacks (semantic-level
-mechanisms). These two classes are mechanistically distinct, providing a
-strict test of the generalisation hypothesis. Whether generalisation holds,
-fails, or worsens performance relative to a clean baseline, the outcome
-remains scientifically informative.
+classifier, fine-tuned on a stratified subset of RAID, retains robustness
+when evaluated on AI text from generators withheld from training. The
+experimental design is conservative at the model-family level: training uses
+open-source or older seen generators, while held-out evaluation uses stronger
+and commercially deployed generators. Because RAID also contains multiple
+adversarial transformations, this protocol tests whether supervised
+fine-tuning on adversarially diverse RAID data transfers to a distinct
+generator family rather than merely memorising a narrow source distribution.
 
 We select DistilBERT at 66~million parameters for two reasons. Practically,
-it is the most capable model deployable within the 8~GB VRAM constraint of
-the experimental hardware. Scientifically, verifying whether the cross-attack
-generalisation property exists at compressed parameter scale is an independent
+it is a compact model deployable within the 8~GB VRAM constraint of
+the experimental hardware. Scientifically, verifying whether held-out-generator
+robustness persists at compressed parameter scale is an independent
 contribution. Larger adversarially robust models in the literature (e.g.,
 GREATER by Li et al.~\cite{li2025}) require hardware inaccessible in
 consumer-grade settings.
 
 The systems contribution of this paper addresses the engineering required to
 train four ablation configurations on 120,000~samples over three epochs on a
-single consumer GPU. We implement and evaluate four parallel and distributed
-computing (PDC) optimisations: parallel multi-stage dataset preprocessing (TC1),
-an optimised DataLoader pipeline (TC2), Automatic Mixed Precision training (TC3),
-and AMP-combined inference-mode acceleration (TC4). We benchmark these
+single consumer GPU. We implement and evaluate four systems optimisations:
+parallel multi-stage dataset preprocessing (PP),
+an optimised DataLoader pipeline (DLO), Automatic Mixed Precision training (AMP-T),
+and AMP-combined inference-mode acceleration (AMP-I). We benchmark these
 optimisations against sequential baselines to quantify efficiency gains.
 
 This paper also integrates two auxiliary empirical contributions against a
 Fast-DetectGPT baseline. First, we reproduced the original paper's
 ChatGPT/GPT-4 aggregate AUROC (0.937 vs.\ the paper's 0.933 target) to
 confirm implementation fidelity. Second, we extended Fast-DetectGPT with
-4-bit NF4 quantization and evaluated it on RAID homoglyph and paraphrase
-subsets. This represents the first adversarial characterisation of this
-detector under the RAID benchmark's specific attack conditions.
+4-bit NF4 quantisation and evaluated it on RAID homoglyph and paraphrase
+subsets. This provides an adversarial characterisation of this
+detector under the RAID benchmark's attack conditions.
 
 \smallskip
 \noindent\textbf{Research Questions.} This paper addresses two primary
 questions:
 
 \smallskip
-\noindent\textbf{RQ1:} Does a DistilBERT model trained on character-level
-adversarial attack types from DetectRL generalise robustness to
-semantically distinct unseen attack types, and does this cross-attack
-generalisation exceed that of zero-shot probabilistic detectors under the
-same conditions?
+\noindent\textbf{RQ1:} Does a DistilBERT model trained on adversarially diverse RAID
+text from seen generators retain robustness on held-out generators, and how
+does its held-out performance compare with zero-shot probabilistic detectors
+under RAID adversarial conditions? (The comparison is inherently directional
+because the supervised and zero-shot paradigms use different primary metrics
+---held-out F1 vs.\ adversarial AUROC---and are evaluated on distinct RAID splits.)
 
 \smallskip
 \noindent\textbf{RQ2:} How do classification head depth and encoder
-fine-tuning depth independently affect clean detection accuracy and
-cross-attack adversarial robustness?
+fine-tuning depth independently affect seen-generator detection accuracy and
+held-out-generator robustness?
 
 \smallskip
 The remainder of this paper is organised as follows. Section~\ref{sec:bg}
 reviews relevant background and prior systems. Section~\ref{sec:model}
-describes the proposed model and its design choices.
-Section~\ref{sec:setup} details the experimental setup, datasets, and PDC
+describes the model and its design choices.
+Section~\ref{sec:setup} details the experimental setup, datasets, and systems
 optimisation protocol. Section~\ref{sec:results} presents reproduced
 baseline results and the primary and extended experimental results.
 Section~\ref{sec:discussion} discusses findings, limitations, and
@@ -211,7 +208,7 @@ adversarially augmented data does not automatically generalise robustness
 across unseen attack types. In some configurations, it actively worsens
 cross-attack robustness relative to a clean-trained baseline. GREATER's
 analysis explicitly flags the cross-attack generalisation gap as unsolved
-even at its scale. This paper targets that gap.
+even at its scale. This paper examines the adjacent question of held-out-generator transfer.
 
 As detection methodology evolved, evaluation benchmarks grew correspondingly
 more rigorous. Wu et al.~\cite{wu2025survey} survey these directions, from
@@ -229,16 +226,14 @@ differences between detectors under adversarial conditions are far larger
 than differences under clean conditions, making adversarial robustness the
 superior discriminating evaluation criterion. Furthermore, homoglyph attacks
 caused accuracy drops of up to 40.6\% for specific detectors, while GPTZero
-dropped only 0.3\% under the same attack, proving that adversarial
+dropped only 0.3\% under the same attack, indicating that adversarial
 vulnerability is highly detector-specific.
 
-Crucially, RAID evaluates off-the-shelf systems rather than training new
-models. It does not study whether training-time exposure to specific attack
-types generalises robustness to others. RAID's 6.2~million-sample scale also
-makes it impractical as a training corpus for single-GPU consumer experiments.
-Therefore, DetectRL~\cite{wu2024detectrl}, with a cleaner attack taxonomy
-and approximately 235,200~samples, serves as the training resource for this
-study.
+Crucially, RAID was introduced primarily as an evaluation benchmark for
+off-the-shelf systems. We reuse its scale differently: a filtered RAID subset
+serves as the training and held-out-generator evaluation resource for the
+DistilBERT study, while specific RAID attack subsets support the Fast-DetectGPT
+extension.
 
 \subsubsection{Fast-DetectGPT (Bao et al., ICLR 2024)}
 
@@ -247,7 +242,6 @@ labelled training data. For a passage $x$, it computes the conditional
 probability curvature score:
 \begin{equation}
 d(x) = \log p_\theta(x) - \mathbb{E}_{x' \sim q(\cdot|x)}[\log p_\theta(x')]
-\label{eq:score}
 \end{equation}
 where $q(\cdot|x)$ is a conditional sampling distribution and $p_\theta$
 is the scoring model. Passages with high $d(x)$ are classified as
@@ -292,72 +286,88 @@ from the generating system, placing it outside the threat model addressed here.
 RADAR~\cite{hu2023} is the first adversarial training approach specifically for
 AI text detection. It demonstrates paraphrase robustness gains through
 adversary-detector co-training, though restricted to a single attack type.
-This paper extends that question to multi-attack-type training with cross-type
-evaluation. GREATER~\cite{li2025} is the current state of the art, but requires
+This paper examines a complementary question: whether multi-attack RAID
+training transfers across held-out generator families. GREATER~\cite{li2025}
+is the current state of the art, but requires
 hardware inaccessible in consumer-grade settings.
 
 \textbf{The cross-attack generalisation problem.} Huang et al.~\cite{huang2024}
 demonstrated empirically that adversarially augmented training does not
 automatically generalise and may cause active harm. The controlled experimental
-design of this paper---training on character-level attacks and evaluating on
-semantic-level attacks---is calibrated to produce an interpretable result
-relative to Huang et al.'s findings, whether positive (generalisation holds),
-negative (fails), or adverse (performance worse than clean baseline).
+design in this paper does not claim to close that attack-family question;
+instead, it tests the adjacent and practically important case of transfer from
+seen RAID generators to withheld RAID generators under an adversarially diverse
+training distribution.
+
+Recent evaluations sharpen this concern. Tufts et al.~\cite{tufts2025}
+showed that both trained and zero-shot detectors can fail under practical
+prompting and domain shifts, especially when evaluated at fixed low false
+positive rates. Pedrotti et al.~\cite{pedrotti2025} further demonstrated that
+style-shifted machine text can fool multiple contemporary detectors, while
+PADBen~\cite{zha2025padben} isolates iterative paraphrasing as a distinct
+laundering regime that existing systems handle poorly. Baidya et
+al.~\cite{baidya2026} provide a broader 2026 benchmark across detector
+architectures, domains, and adversarial conditions, finding that
+in-distribution transformer performance does not imply robust cross-domain or
+cross-generator generalisation. These studies motivate our cautious framing:
+the present work tests generator-family transfer within RAID rather than
+claiming real-world detector reliability.
 
 \subsection{Datasets}
 
-\textbf{DetectRL}~\cite{wu2024detectrl} is the primary training and
-seen-test dataset. It contains approximately 235,200~labelled samples
-across clean human-written and AI-generated text, alongside multiple
-adversarially perturbed variants. Attack types are organised into separable
-categories: direct prompt (clean AI), homoglyph substitution, word
-substitution, paraphrase attacks, prompt-based adversarial attacks, data
-mixing, and spelling errors. This categorisation allows the controlled
-seen/unseen split central to this study. Spelling error and data mixing
-subsets are excluded from both training and evaluation. Spelling errors
-create ground-truth ambiguity with naturally occurring typos, and data mixing
-samples (mixed human-AI content) possess no unambiguous binary label.
+\textbf{RAID}~\cite{dugan2024} is the primary training and evaluation corpus
+for the DistilBERT experiments. It contains approximately 6.2~million
+human-written and AI-generated examples spanning 11~LLMs, multiple domains,
+and 11~adversarial attacks. This scale allows the supervised detector to be
+trained on adversarially diverse samples while reserving entire generator
+families for held-out evaluation. We retain five domains used consistently
+by the local processing pipeline (news, reddit, recipes, poetry, and
+abstracts), derive binary labels from the RAID \texttt{model} field, and map
+AI samples into seen and held-out generator groups.
 
-\textbf{RAID}~\cite{dugan2024} serves as the adversarial evaluation corpus
-for the Fast-DetectGPT extension experiment (Section~\ref{ssec:additional}).
-From the RAID training split, we extract two attack-type subsets: homoglyph
-substitution (character-level Unicode lookalike replacement) and paraphrase
-rewriting (semantic-preserving surface alteration). Each subset is balanced
-to 1,000~samples (500~human, 500~AI) using a fixed random seed of 42.
+\textbf{DetectRL}~\cite{wu2024detectrl} is used as a supporting benchmark in
+the reproduction and dataset-selection phase rather than as the source of the
+reported DistilBERT ablation results. Earlier DetectRL regeneration runs
+produced near-saturated F1 values above 0.99, motivating the switch to RAID
+for a more demanding and higher-credibility evaluation setting.
+
+For the Fast-DetectGPT extension experiment (Section~\ref{ssec:additional}),
+we separately extract RAID homoglyph and paraphrase subsets. Each subset is
+balanced to 1,000~samples (500~human, 500~AI) using a fixed random seed of 42.
 
 % ---------------------------------------------------------------
 \section{Proposed Model}\label{sec:model}
 
 \subsection{Core Design Philosophy}
 
-The proposed model is a DistilBERT-based binary text classifier fine-tuned
+The model is a DistilBERT-based binary text classifier fine-tuned
 on adversarially stratified training data. The design rests on three principles:
-
-\begin{itemize}
-\item \textbf{Pre-trained encoder:} DistilBERT's six transformer layers already
+(1) \textbf{Pre-trained encoder:} DistilBERT's six transformer layers already
 encode rich syntactic and semantic representations from large corpora. Fine-tuning
 adapts these features rather than learning from scratch on a relatively small
 labelled dataset.
-\item \textbf{Mechanistically diverse training data:} The training distribution
-includes multiple adversarial attack types from the same mechanistic family. Exposing
-the model to character-level perturbation variants (homoglyph and word substitution)
-forces it to learn representations independent of surface token statistics.
-\item \textbf{Strict unseen evaluation:} The held-out evaluation set is mechanistically
-distinct from the training attacks. Withholding all semantic-level attacks (paraphrase
-and prompt-based adversarial) ensures the cross-attack generalisation evaluation tests
-true transfer, not interpolation.
-\end{itemize}
+(2) \textbf{Adversarially diverse training data:} The RAID training distribution
+includes multiple domains, generators, and adversarial transformations. Exposing
+the model to this diversity reduces the chance that performance comes from a
+single brittle surface cue.
+(3) \textbf{Strict held-out-generator evaluation:} The held-out evaluation set
+contains generator families absent from training. This tests transfer to new
+source models rather than interpolation within the same generator pool.
 
-The proposed model configuration is \texttt{ablation\_b} (a deep classification head
-with partial encoder freezing), selected following the ablation study detailed below.
-We train and evaluate four configurations; \texttt{ablation\_b} achieves the highest
-validation F1 alongside the best VRAM efficiency profile (Section~\ref{sec:results}).
+The validation-selected model configuration is \texttt{ablation\_b} (a deep
+classification head with partial encoder freezing), selected by best validation F1.
+We train and evaluate four configurations. The results distinguish this
+checkpoint-selection criterion from robustness selection: \texttt{ablation\_b}
+achieves the highest validation and seen-test F1, while \texttt{baseline1},
+\texttt{ablation\_a}, and \texttt{ablation\_c} expose different robustness and
+efficiency trade-offs (Section~\ref{sec:results}).
 
 \subsection{Model Architecture}\label{ssec:arch}
 
+Figure~\ref{fig:arch} illustrates the encoder--classifier pipeline.
 \begin{figure*}[t]
-\centerline{\includegraphics[width=\textwidth]{figure1_architecture.png}}
-\caption{DistilBERT binary classifier architecture. The proposed model
+\centerline{\includegraphics[width=\textwidth]{figures/figure1_architecture.png}}
+\caption{DistilBERT binary classifier architecture. The model
 stacks a classification head atop the frozen \texttt{distilbert-base-uncased}
 encoder. The [CLS] token's final hidden state (768-d) is passed to either
 the single-layer head (\texttt{Dropout $\rightarrow$ Linear(768$\rightarrow$2)})
@@ -381,7 +391,7 @@ excluding its parameters from gradient computation. The classification head rece
 \small\texttt{Dropout(p=0.3) $\rightarrow$ Linear(768 $\rightarrow$ 2)}
 \end{center}
 
-\textbf{Classification head---deep variant (proposed model).} This variant is used in
+\textbf{Classification head---deep variant.} This variant is used in
 \texttt{ablation\_b} and \texttt{ablation\_c}:
 \begin{center}
 \small\texttt{Dropout(p=0.3) $\rightarrow$ Linear(768$\rightarrow$384)
@@ -407,7 +417,7 @@ effects of head depth and encoder fine-tuning depth, summarised in Table~\ref{ta
 \midrule
 \texttt{baseline1} & Single & 0 of 6 & Fully fine-tuned; shallow head\\
 \texttt{ablation\_a} & Single & 0--3 (4 of 6) & Partially frozen; shallow head\\
-\texttt{ablation\_b} & Deep & 0--3 (4 of 6) & Partially frozen; deep head $\leftarrow$ \emph{proposed}\\
+\texttt{ablation\_b} & Deep & 0--3 (4 of 6) & Partially frozen; deep head; validation-selected\\
 \texttt{ablation\_c} & Deep & 0 of 6 & Fully fine-tuned; deep head\\
 \bottomrule
 \end{tabular}
@@ -421,66 +431,59 @@ This is a standard partial-freezing heuristic for fine-tuning on limited
 data~\cite{goodfellow2016}, motivated by the constraint that lower layers
 should not be overwritten by attack-specific signals that may not generalise.
 
-\subsection{Seen / Unseen Attack Split}\label{ssec:split}
+\subsection{Seen / Held-Out Generator Split}\label{ssec:split}
 
+Figure~\ref{fig:split} maps the split pipeline.
 \begin{figure*}[t]
-\centerline{\includegraphics[width=\textwidth]{figure2_split_pipeline.png}}
-\caption{Seen / Unseen attack split pipeline. The DetectRL corpus is
-partitioned into a seen family (Direct Prompt, Homoglyph, Word
-Substitution---used for training and seen-test evaluation) and an unseen
-family (Paraphrase and Prompt-based Adversarial---held out entirely).
-Spelling error and data-mixing subsets are excluded from both splits. The
-seen/unseen boundary separates character-level mechanisms from
-semantic-level mechanisms; the cross-attack evaluation is thereby strictly
-conservative.}
+\centerline{\includegraphics[width=\textwidth]{figures/figure2_split_pipeline.png}}
+\caption{Seen / held-out generator split pipeline. The RAID corpus is filtered
+to retained domains, balanced into a 120,000-sample training pool from seen
+generators, and evaluated on a separate held-out-generator pool. The
+seen/held-out boundary separates source model families rather than attack
+types; robustness is measured by comparing seen-generator test F1 against
+held-out-generator F1.}
 \label{fig:split}
 \end{figure*}
 
-The central experimental manipulation is the stratified seen/unseen split
-of DetectRL's attack taxonomy. The split maps DetectRL's internal
-\texttt{data\_type} labels into three groups.
+The central experimental manipulation is the stratified seen/held-out split
+over RAID generator families. The split maps RAID's \texttt{model} field into
+three groups.
 
-\textbf{Seen attack family.} This group comprises three DetectRL \texttt{data\_type}
-categories: \texttt{direct\_prompt} (clean AI-generated text with no adversarial
-modification), \texttt{adversarial\_character\_llm} (homoglyph substitution), and
-\texttt{adversarial\_word\_llm} combined with \texttt{adversarial\_character\_word\_llm}
-(word substitution). These categories form the training and seen-test distribution.
+\textbf{Seen generator family.} The training and seen-test distribution uses
+AI samples from \texttt{mpt}, \texttt{mistral}, \texttt{gpt2}, and
+\texttt{llama-chat}, combined with human-written samples. These generators
+provide broad coverage of open-source and older model families while leaving
+stronger generators unseen during supervised fitting.
 
-\textbf{Unseen attack family.} Withheld from training entirely and used solely for
-held-out evaluation, this group comprises six DetectRL data types spanning two
-semantic-level mechanisms. It includes paraphrase attacks (\texttt{paraphrase\_back\_translation\_llm},
-\texttt{paraphrase\_polish\_llm}, \texttt{paraphrase\_dipper\_llm}) and prompt-based
-adversarial attacks (\texttt{prompt\_few\_shot}, \texttt{prompt\_sico}).
+\textbf{Held-out generator family.} The held-out evaluation pool uses AI
+samples from \texttt{gpt3}, \texttt{gpt4}, \texttt{chatgpt}, \texttt{cohere},
+and \texttt{cohere-chat}, plus a balanced human subset. These samples are
+withheld from training and validation and are used solely for generalisation
+evaluation.
 
-\textbf{Excluded subsets.} Two data types are excluded from both training and evaluation.
-Spelling error substitutions are excluded because they overlap with the natural typo
-distribution of human-written text, creating ambiguous ground-truth labels that would
-contaminate the classifier. Data mixing samples are excluded because their composite
-human-AI authorship lacks an unambiguous binary label.
-
-This split explicitly separates mechanisms: character-level (seen) versus semantic-level
-(unseen) attacks. If generalisation holds across this boundary, it indicates true
-attack-type-invariant representation learning. If it fails, the negative result remains
-scientifically informative.
+\textbf{Domain filtering.} We retain RAID rows from news, reddit, recipes,
+poetry, and abstracts, which are sufficiently populated across the selected
+generator families. The resulting split tests transfer across generator
+families under RAID's adversarially diverse distribution.
 
 \subsection{Training Protocol}
 
-\textbf{Dataset construction.} We undersample AI text from the DetectRL training
-pool to equalise representation across the three seen attack groups. Combining
-these with an equal number of human samples yields a balanced training pool of
-120,000~samples (60,000~human, 60,000~AI). Random permutation with seed~42 splits
-this pool 80/10/10 into 96,000~training samples, 12,000~validation samples, and
-12,000~seen-test samples. We construct the unseen evaluation pool separately:
-paraphrase and prompt-adversarial attack subsets are balanced to 20,000~samples
-(10,000~human, 10,000~AI) and strictly withheld from training.
+\textbf{Dataset construction.} We undersample RAID AI text from the seen-generator
+pool and combine it with an equal number of human samples, yielding a balanced
+training pool of 120,000~samples (60,000~human, 60,000~AI). Random permutation
+with seed~42 splits this pool 80/10/10 into 96,000~training samples,
+12,000~validation samples, and 12,000~seen-generator test samples. We construct
+the held-out evaluation pool separately from withheld generators, balancing it to
+20,000~samples (10,000~human, 10,000~AI) before applying the 10,000-sample
+evaluation cap used by the training script.
 
-\textbf{Pre-tokenisation caching.} All samples are tokenised once at
-\texttt{max\_length=256} with padding and truncation before training begins,
-and stored as \texttt{.pt} tensor caches on disk. DataLoader workers load
-pre-computed tensors directly, eliminating tokenisation overhead from the training
-loop and raising GPU utilisation from approximately 30--50\% to 80--90\%+.
-We truncate to 256 (rather than DistilBERT's maximum of 512) to permit
-\texttt{batch\_size=32} within 8~GB VRAM.
+\textbf{Tokenisation and data loading.} Samples are tokenised at
+\texttt{max\_length=256} with padding and truncation. The primary training
+pipeline performs tokenisation inside DataLoader worker processes so CPU
+tokenisation overlaps with GPU training; the separate AMP timing experiment uses
+the cached tensor workflow reported in the systems benchmark. We truncate to 256
+(rather than DistilBERT's maximum of 512) to permit \texttt{batch\_size=32}
+within 8~GB VRAM in the main ablation run.
 
 \textbf{Optimiser and regularisation.} We train all configurations using the
 AdamW optimiser at a learning rate of $2 \times 10^{-5}$ and weight decay of 0.01,
@@ -491,47 +494,48 @@ Python, NumPy, PyTorch, and CUDA for exact reproducibility.
 
 \textbf{Checkpoint selection.} Validation F1 is computed post-epoch. The model
 weights achieving the highest validation F1 across all epochs are saved and
-used for all subsequent test and unseen-set evaluations.
+used for all subsequent seen-test and held-out evaluations.
 
 \subsection{Evaluation Metrics}
 
-The primary evaluation metric is binary F1 score (macro-averaged). This guards
-against the class-imbalance gaming that accuracy-based metrics suffer from.
+The primary evaluation metric is positive-class binary F1 score, with the AI
+class treated as positive. Because all reported DistilBERT splits are balanced,
+this metric is directly interpretable alongside accuracy, precision, and recall.
 ROC-AUC serves as a threshold-free measure of overall discriminative ability.
 Accuracy, precision, and recall are reported as secondary diagnostics.
-The primary cross-attack generalisation metric is Relative Robustness
+The primary generalisation metric is Relative Robustness
 Degradation (RRD):
 \begin{equation}
-\text{RRD}(\%) = \frac{F1_{\text{seen}} - F1_{\text{unseen}}}{F1_{\text{seen}}} \times 100
+\text{RRD}(\%) = \frac{F1_{\text{seen}} - F1_{\text{held-out}}}{F1_{\text{seen}}} \times 100
 \label{eq:rrd}
 \end{equation}
-Lower RRD indicates superior cross-attack generalisation. An RRD below 5\%
+Lower RRD indicates superior held-out-generator generalisation. Following an interpretive heuristic (no established significance
+criterion exists in the literature), an RRD below 5\%
 indicates meaningful transfer of robustness; an RRD exceeding 10--15\% indicates
 that generalisation has failed.
 
-\subsection{PDC Systems Optimisations (TC1--TC4)}
+\subsection{Systems Optimisations (PP--AMP-I)}
 
 Training four ablation configurations over 120,000~samples on a single RTX~3050 (8~GB)
 requires deliberate systems engineering. We designed, implemented, and benchmarked
 four optimisations:
 
-\textbf{TC1---Parallel multi-stage preprocessing.} Dataset filtering and pool
-construction are parallelised across 11 of the available 12~logical cores
-(Ryzen~5600X) using Python's multiprocessing pool. Sequential filtering of the
-full 744,912-row raw DetectRL corpus took 31.83~seconds; parallel filtering reduced
-this to 8.89~seconds, a 3.58$\times$ speedup. The cached parquet workflow reduced
-the total pipeline from $\sim$2.5~hours (initial download) to under 9~seconds
-on subsequent runs.
+\textbf{PP---Parallel multi-stage preprocessing.} Dataset filtering and pool
+construction are parallelised across available CPU cores using Python's
+multiprocessing pool. The recorded preprocessing benchmark reports a
+3.58$\times$ speedup for parallel filtering over the sequential implementation.
+For the RAID pipeline, the processed parquet files used by the DistilBERT
+experiments are saved as \texttt{raid\_train\_pool.parquet} and
+\texttt{raid\_test\_unseen.parquet}.
 
-\textbf{TC2---Optimised DataLoader pipeline.} The pre-tokenisation caching described
-in Section~\ref{ssec:split} decouples tokenisation cost from the training loop.
-Combined with \texttt{pin\_memory=True} (enabling asynchronous host-to-GPU transfers)
-and \texttt{num\_workers=4} (safe on Windows when run standalone), GPU starvation
-between batches is minimised. GPU VRAM utilisation during training sits at the
-full 8~GB dedicated capacity.
+\textbf{DLO---Optimised DataLoader pipeline.} Parallel DataLoader workers overlap
+CPU tokenisation and host-to-device transfer with GPU training. Combined with
+\texttt{pin\_memory=True} and multi-worker prefetching, GPU starvation between
+batches is reduced. GPU VRAM utilisation during the main training runs sits near
+the full 8~GB dedicated capacity.
 
-\textbf{TC3---Automatic Mixed Precision (AMP) training.} AMP training with
-\texttt{GradScaler} is applied to \texttt{ablation\_b} (the proposed configuration)
+\textbf{AMP-T---Automatic Mixed Precision (AMP) training.} AMP training with
+\texttt{GradScaler} is applied to \texttt{ablation\_b} (the validation-selected configuration)
 with \texttt{batch\_size=128}---a 4$\times$ batch increase made feasible by the
 reduced per-example VRAM footprint under FP16 activations. Under this regime,
 \texttt{ablation\_b} completed 3~training epochs in 957.56~seconds at a peak VRAM
@@ -539,7 +543,7 @@ usage of 4,218.95~MB. Compared to the identical configuration under the baseline
 32-batch training regime (3,180.47~seconds), this represents a 3.32$\times$
 wall-clock speedup.
 
-\textbf{TC4---AMP + inference-mode acceleration.} At inference time, combining
+\textbf{AMP-I---AMP + inference-mode acceleration.} At inference time, combining
 \texttt{torch.amp.autocast("cuda")} with \texttt{torch.inference\_mode()} eliminates
 gradient bookkeeping. Benchmarked over 100~trials at batch size~32 with sequence
 length~256, baseline FP32 latency was 183.75~ms/batch. The optimised configuration
@@ -551,48 +555,12 @@ of 380.64~samples/second.
 
 \subsection{Hardware and Software Environment}
 
-\begin{table}[t]
-\caption{Primary Training Hardware}
-\label{tab:hw}
-\begin{center}
-\small
-\begin{tabular}{ll}
-\toprule
-\textbf{Component} & \textbf{Specification}\\
-\midrule
-GPU     & NVIDIA RTX 3050 8~GB VRAM (+16~GB shared)\\
-CPU     & AMD Ryzen 5600X, 6 cores / 12 threads\\
-RAM     & 32~GB DDR4\\
-OS      & Windows 10\\
-Storage & NVMe SSD (parquet and tensor cache I/O)\\
-\bottomrule
-\end{tabular}
-\end{center}
-\end{table}
-
-\begin{table}[t]
-\caption{Software Environment (from \texttt{environment.yml})}
-\label{tab:sw}
-\begin{center}
-\small
-\begin{tabular}{ll}
-\toprule
-\textbf{Package} & \textbf{Version}\\
-\midrule
-Python       & 3.10.14\\
-PyTorch      & 2.2.0 + CUDA 12.1\\
-Transformers & 4.40.0\\
-Datasets     & 2.19.0\\
-scikit-learn & 1.4.2\\
-accelerate   & 0.30.1\\
-numpy        & 1.26.4\\
-pandas       & 2.2.2\\
-\bottomrule
-\end{tabular}
-\end{center}
-\end{table}
-
-All experiments use \texttt{SEED=42} with
+DistilBERT experiments run on a Windows 10 workstation with an NVIDIA
+RTX~3050 8~GB GPU, AMD Ryzen 5600X CPU (6 cores / 12 threads), 32~GB DDR4 RAM,
+and NVMe SSD storage for parquet and tensor-cache I/O. The software stack is
+Python~3.10.14, PyTorch~2.2.0 + CUDA~12.1, Transformers~4.40.0,
+Datasets~2.19.0, scikit-learn~1.4.2, accelerate~0.30.1, NumPy~1.26.4, and
+pandas~2.2.2. All experiments use \texttt{SEED=42} with
 \texttt{torch.backends.cudnn.deterministic=True} and
 \texttt{torch.backends.cudnn.benchmark=False} to ensure complete
 reproducibility.
@@ -606,7 +574,6 @@ or backward passes---meaning it did not bottleneck training throughput.
 
 \begin{table}[t]
 \caption{DistilBERT Training Hyperparameters}
-\label{tab:hp}
 \begin{center}
 \small
 \begin{tabular}{ll}
@@ -616,7 +583,7 @@ or backward passes---meaning it did not bottleneck training throughput.
 Base model             & \texttt{distilbert-base-uncased}\\
 Max sequence length    & 256 tokens\\
 Batch size (baseline)  & 32\\
-Batch size (TC3 AMP)   & 128\\
+Batch size (AMP-T)   & 128\\
 Learning rate          & $2\times10^{-5}$\\
 Optimiser              & AdamW\\
 Weight decay           & 0.01\\
@@ -632,7 +599,7 @@ Unseen test set size   & 10,000 samples (capped from 20,000)\\
 \end{center}
 \end{table}
 
-The increase in batch size from 32 to 128 under TC3 is a direct consequence
+The increase in batch size from 32 to 128 under AMP-T is a direct consequence
 of Automatic Mixed Precision (AMP). FP16 activations halve per-example VRAM
 consumption. Without this reduction, running \texttt{batch\_size=128} on the
 RTX~3050 8~GB triggers an Out-Of-Memory (OOM) error. With AMP enabled, the
@@ -640,25 +607,25 @@ identical training loop peaks at 4,218.95~MB VRAM. This provides a
 hardware-verified benefit beyond pure execution speed: AMP unlocks larger
 batches that yield more stable gradient estimates.
 
-\subsection{PDC Benchmarking Protocol}
+\subsection{Efficiency Benchmarking Protocol}
 
-Each PDC test case (TC1--TC4) is benchmarked in isolation against an
+Each optimisation case (PP--AMP-I) is benchmarked in isolation against an
 unoptimised sequential baseline, following the per-stage instrumentation
 strategy of Isenko et al.~\cite{isenko2022}:
 
-\textbf{TC1 benchmark.} We compare a sequential filter run (single process,
+\textbf{PP benchmark.} We compare a sequential filter run (single process,
 GIL-bound, timed from parquet load to processed pool save) against a parallel
 filter run (11~workers via Python multiprocessing pool). Both runs process
 the full 744,912-row raw corpus and produce identical output files. Speedup
 is calculated as sequential\_time / parallel\_time.
 
-\textbf{TC2 benchmark.} We measure GPU utilisation percentage via
+\textbf{DLO benchmark.} We measure GPU utilisation percentage via
 \texttt{nvidia-smi} during training, comparing \texttt{num\_workers=0} against
 \texttt{num\_workers=4} with \texttt{pin\_memory=True}. The pre-tokenisation
 cache is active in both conditions to ensure the DataLoader's sole task is
 tensor loading. This cleanly isolates the overlap benefit.
 
-\textbf{TC3 benchmark.} We compare wall-clock training time for
+\textbf{AMP-T benchmark.} We compare wall-clock training time for
 \texttt{ablation\_b} (3~epochs, batch=128) using AMP (\texttt{GradScaler} +
 \texttt{autocast}) against the identical configuration's baseline non-AMP
 time at batch=32 from \texttt{training\_times.json}. We record peak VRAM via
@@ -666,7 +633,7 @@ time at batch=32 from \texttt{training\_times.json}. We record peak VRAM via
 the precision speedup and the larger batch size made possible by AMP, as
 these factors operate in tandem.
 
-\textbf{TC4 benchmark.} We conduct a 100-trial latency test (discarding a
+\textbf{AMP-I benchmark.} We conduct a 100-trial latency test (discarding a
 10-trial warm-up) at batch=32 and seq\_len=256 using dummy input tensors.
 The baseline is standard \texttt{torch.no\_grad()} FP32 inference. The
 optimised condition uses \texttt{torch.inference\_mode()} combined with
@@ -677,42 +644,26 @@ and samples per second.
 \label{ssec:reprosetup}
 
 The Fast-DetectGPT black-box pipeline was reproduced on a Kaggle
-Tesla~T4 GPU (16~GB VRAM) using the official public repository.
-
-\begin{table}[t]
-\caption{Fast-DetectGPT Reproduction Configuration}
-\label{tab:reproCfg}
-\begin{center}
-\small
-\begin{tabular}{lp{5.5cm}}
-\toprule
-\textbf{Parameter} & \textbf{Value}\\
-\midrule
-Platform      & Kaggle (Tesla T4, 16~GB VRAM)\\
-Track         & Black-box (\texttt{gpt3to4.sh} workflow)\\
-Sampling model & gpt-j-6B\\
-Scoring model & gpt-j-6B (single configuration)\\
-Datasets      & xsum, writing, pubmed\\
-Source models & davinci, gpt-3.5-turbo, gpt-4\\
-Mode          & Minimal black-box\\
-White-box     & squad/writing; gpt2-xl, opt-2.7b, gpt-neo-2.7B, gpt-j-6B\\
-\bottomrule
-\end{tabular}
-\end{center}
-\end{table}
+Tesla~T4 GPU (16~GB VRAM) using the official public repository. The black-box
+run follows the \texttt{gpt3to4.sh} workflow with \texttt{gpt-j-6B} as both
+sampling and scoring model over \texttt{xsum}, \texttt{writing}, and
+\texttt{pubmed}, with source models \texttt{davinci},
+\texttt{gpt-3.5-turbo}, and \texttt{gpt-4}. The representative white-box run
+uses \texttt{squad}/\texttt{writing} with \texttt{gpt2-xl},
+\texttt{opt-2.7b}, \texttt{gpt-neo-2.7B}, and \texttt{gpt-j-6B}.
 
 \textbf{Intentional deviations.} The use of minimal black-box mode reduces
 evaluation breadth compared to the full three-setting sweep, but preserves
 the primary scoring configuration. Additionally, we skipped \texttt{gpt-neox-20B}
 due to Kaggle resource constraints. These deviations preclude reproduction
 of the 5-model AUROC aggregate; therefore, only the ChatGPT/GPT-4 aggregate
-is compared to the original paper target. All applied patches (tokenizer
+is compared to the original paper target. All applied patches (tokeniser
 compatibility fixes, low-memory model loading, disk preflight checks, and
 session-resume logic) serve as operational safeguards and do not alter the
 fundamental detection criterion.
 
-\textbf{Tokenizer compatibility patch.} The official Fast-DetectGPT
-repository loads scoring-model tokenizers without configuring the padding
+\textbf{Tokeniser compatibility patch.} The official Fast-DetectGPT
+repository loads scoring-model tokenisers without configuring the padding
 token. Decoder-only causal LLMs (like \texttt{gpt-j-6B} and \texttt{gpt2-xl})
 do not define a \texttt{pad\_token} by default, causing a \texttt{ValueError}
 when padding batched inputs. We applied two targeted fixes. First, a
@@ -728,31 +679,13 @@ from the model's receptive field during inference.
 \subsection{Fast-DetectGPT RAID Extension Setup}
 \label{ssec:raidsetup}
 
-The RAID adversarial evaluation of Fast-DetectGPT was run locally:
-
-\begin{table}[t]
-\caption{Fast-DetectGPT RAID Extension Configuration}
-\label{tab:raidCfg}
-\begin{center}
-\small
-\begin{tabular}{ll}
-\toprule
-\textbf{Parameter} & \textbf{Value}\\
-\midrule
-Platform           & Local Windows workstation\\
-PyTorch            & 2.6.0 + CUDA 12.4\\
-BitsAndBytes       & 4-bit functional (NF4)\\
-Sampling model     & gpt-j-6B (4-bit NF4)\\
-Scoring models     & gpt-j-6B, gpt2-xl (both 4-bit NF4)\\
-RAID subsets       & Homoglyph (1,000), Paraphrase (1,000)\\
-Subset balance     & 500 human / 500 AI per subset (seed=42)\\
-MC samples         & 2,500\\
-Statistical method & Bootstrap 95\% CI (1,000 iterations)\\
-Significance       & Empirical $p$-value (two-sided)\\
-\bottomrule
-\end{tabular}
-\end{center}
-\end{table}
+The RAID adversarial evaluation of Fast-DetectGPT was run locally with
+PyTorch~2.6.0 + CUDA~12.4 and 4-bit NF4 BitsAndBytes quantisation. We use
+\texttt{gpt-j-6B} as the sampling model and evaluate \texttt{gpt-j-6B} and
+\texttt{gpt2-xl} as scoring models, both quantised to NF4. The RAID homoglyph
+and paraphrase subsets each contain 1,000 balanced samples (500 human / 500 AI,
+seed=42). We use 2,500 MC samples, bootstrap 95\% CIs with 1,000 iterations,
+and two-sided empirical $p$-values.
 
 We selected the Monte Carlo (MC) sample count of 2,500 via ablation on a
 200-sample calibration set from RAID. AUROC stability was evaluated across
@@ -799,7 +732,7 @@ pubmed / gpt-4          & 0.8376 & 0.8203\\
 \end{center}
 \end{table}
 
-\textbf{Observations.} Performance is heavily domain-dependent. The
+\textbf{Observations (Table~\ref{tab:blackbox}).} Performance is heavily domain-dependent. The
 \texttt{writing} dataset yields the highest AUROC across all source models
 (0.9762--0.9966), indicating that creative writing prompts elicit the most
 distinctive AI generation patterns. Conversely, the \texttt{pubmed} domain
@@ -813,73 +746,41 @@ human-indistinguishable text.
 
 \subsubsection{Paper vs.\ Reproduced Aggregate Comparison}
 
-\begin{table}[t]
-\caption{Paper vs.\ Reproduced AUROC Aggregate}
-\label{tab:aggregate}
-\begin{center}
-\small
-\begin{tabular}{lccc}
-\toprule
-\textbf{Metric} & \textbf{Paper} & \textbf{Reproduced} & \textbf{$\Delta$}\\
-\midrule
-ChatGPT/GPT-4 Generations & 0.9338 & \textbf{0.9370} & +0.0032\\
-5-Model Generations        & 0.9887 & N/A              & ---\\
-\bottomrule
-\end{tabular}
-\end{center}
-\end{table}
-
-The reproduced aggregate of 0.9370 exceeds the original paper target by
-$+$0.0032. This margin falls within stochastic variation expected from Monte
-Carlo sampling and does not represent a systematic improvement. It confirms
-implementation fidelity.
+The reproduced ChatGPT/GPT-4 aggregate AUROC is 0.9370, compared with the
+original paper target of 0.9338 ($+0.0032$). The original 5-model aggregate
+(0.9887) is not reproduced because \texttt{gpt-neox-20B} is excluded under the
+resource constraint described above. The small ChatGPT/GPT-4 difference falls
+within stochastic variation expected from Monte Carlo sampling and does not
+represent a systematic improvement; it indicates implementation fidelity.
 
 \subsubsection{White-Box Representative Results}
 
-\begin{table}[t]
-\caption{Fast-DetectGPT White-Box Representative AUROC and PR-AUC}
-\label{tab:whitebox}
-\begin{center}
-\small
-\begin{tabular}{lcc}
-\toprule
-\textbf{Setting} & \textbf{AUROC} & \textbf{PR-AUC}\\
-\midrule
-squad / gpt-j-6B          & 0.9852 & 0.9871\\
-writing / gpt2-xl         & 0.9982 & 0.9984\\
-writing / opt-2.7b        & 0.9971 & 0.9975\\
-writing / gpt-neo-2.7B    & 0.9981 & 0.9979\\
-writing / gpt-j-6B        & 0.9974 & 0.9975\\
-\bottomrule
-\end{tabular}
-\end{center}
-\end{table}
-
-White-box results demonstrate near-ceiling AUROC on the \texttt{writing}
-dataset across all scoring models. This is consistent with the original paper's
-headline figures and provides secondary confirmation that the pipeline
-implementation is faithful.
+White-box representative checks provide secondary confirmation that the
+pipeline implementation is faithful: \texttt{squad}/\texttt{gpt-j-6B} reaches
+0.9852 AUROC, while \texttt{writing} runs across \texttt{gpt2-xl},
+\texttt{opt-2.7b}, \texttt{gpt-neo-2.7B}, and \texttt{gpt-j-6B} fall in the
+0.9971--0.9982 AUROC range.
 
 \subsection{Additional Experiment Results}\label{ssec:additional}
 
-This section details the primary DistilBERT cross-attack generalisation
-ablation study, followed by the PDC systems optimisation benchmarks and
+This section details the primary DistilBERT held-out-generator generalisation
+ablation study, followed by the systems optimisation benchmarks and
 the Fast-DetectGPT RAID adversarial evaluation.
 
-\subsubsection{DistilBERT Ablation Study: Cross-Attack Generalisation}
+\subsubsection{DistilBERT Ablation Study: Held-Out-Generator Generalisation}
 
 \begin{table*}[t]
-\caption{Per-Ablation Performance --- Seen Test Split and Unseen Attack Split}
+\caption{Per-Ablation Performance --- Seen-Generator Test Split and Held-Out-Generator Split}
 \label{tab:ablation}
 \begin{center}
 \footnotesize
 \begin{tabular}{lcccccc}
 \toprule
-\textbf{Config} & \textbf{Best Val F1} & \textbf{Seen F1} & \textbf{Seen ROC-AUC} & \textbf{Unseen F1} & \textbf{Unseen ROC-AUC} & \textbf{RRD (\%)}\\
+\textbf{Config} & \textbf{Best Val F1} & \textbf{Seen F1} & \textbf{Seen ROC-AUC} & \textbf{Held-out F1} & \textbf{Held-out ROC-AUC} & \textbf{RRD (\%)}\\
 \midrule
 \texttt{baseline1}               & 0.9442 & 0.9238 & 0.9879 & 0.9135 & 0.9733 & \textbf{1.11}\\
 \texttt{ablation\_a}             & 0.9421 & 0.9409 & 0.9900 & 0.9267 & 0.9775 & \textbf{1.51}\\
-\texttt{ablation\_b} (proposed)  & \textbf{0.9488} & \textbf{0.9481} & 0.9908 & 0.9184 & 0.9743 & 3.13\\
+\texttt{ablation\_b} (val-selected)  & \textbf{0.9488} & \textbf{0.9481} & 0.9908 & 0.9184 & 0.9743 & 3.13\\
 \texttt{ablation\_c}             & 0.9484 & 0.9472 & \textbf{0.9923} & \textbf{0.9263} & \textbf{0.9790} & 2.21\\
 \bottomrule
 \end{tabular}
@@ -887,52 +788,23 @@ the Fast-DetectGPT RAID adversarial evaluation.
 \end{table*}
 
 \begin{table*}[t]
-\caption{Full Diagnostic Metrics --- Seen and Unseen Splits}
+\caption{Full Diagnostic Metrics --- Seen-Generator and Held-Out-Generator Splits}
 \label{tab:diagnostic}
 \begin{center}
 \footnotesize
 \begin{tabular}{lcccccccc}
 \toprule
-\textbf{Config} & \textbf{S.Acc} & \textbf{S.Prec} & \textbf{S.Rec} & \textbf{S.F1} & \textbf{U.Acc} & \textbf{U.Prec} & \textbf{U.Rec} & \textbf{U.F1}\\
+\textbf{Config} & \textbf{S.Acc} & \textbf{S.Prec} & \textbf{S.Rec} & \textbf{S.F1} & \textbf{H.Acc} & \textbf{H.Prec} & \textbf{H.Rec} & \textbf{H.F1}\\
 \midrule
 \texttt{baseline1}  & 0.9195 & 0.8768 & 0.9762 & 0.9238 & 0.9110 & 0.8889 & 0.9394 & 0.9135\\
 \texttt{ablation\_a}& 0.9393 & 0.9177 & 0.9652 & 0.9409 & 0.9269 & 0.9294 & 0.9240 & 0.9267\\
 \texttt{ablation\_b}& 0.9474 & 0.9352 & 0.9615 & 0.9481 & 0.9205 & 0.9433 & 0.8948 & 0.9184\\
 \texttt{ablation\_c}& 0.9453 & 0.9157 & 0.9810 & 0.9472 & 0.9261 & 0.9243 & 0.9282 & 0.9263\\
 \bottomrule
-\multicolumn{9}{l}{\footnotesize S.~= Seen split; U.~= Unseen split; Acc~= Accuracy; Prec~= Precision; Rec~= Recall.}
+\multicolumn{9}{l}{\footnotesize S.~= Seen-generator split; H.~= Held-out-generator split; Acc~= Accuracy; Prec~= Precision; Rec~= Recall.}
 \end{tabular}
 \end{center}
 \end{table*}
-
-\begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figure3_best_val_f1.png}}
-\caption{Best-epoch validation F1 by ablation configuration.
-\texttt{ablation\_b} achieves the highest validation F1 (0.9488) and is
-selected as the proposed configuration. All four configurations cluster
-within a narrow 0.007-point band, indicating robust and consistent training
-across all head and freezing variants.}
-\label{fig:val_f1}
-\end{figure}
-
-\begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figure4_ablation_f1_comparison.png}}
-\caption{Seen vs.\ unseen F1 score by ablation configuration. The narrow
-gap between seen and unseen bars in all configurations visually confirms
-that cross-attack generalisation holds: no configuration shows a collapse
-in unseen performance. \texttt{ablation\_c} achieves the best balance with
-the smallest seen--unseen gap of 2.09~pp.}
-\label{fig:ablation_f1}
-\end{figure}
-
-\begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figure5_rrd_by_config.png}}
-\caption{Relative Robustness Degradation (RRD) by ablation configuration.
-All four configurations fall well below the 5\% generalisation threshold
-(dashed red line). \texttt{baseline1} achieves the lowest RRD (1.11\%),
-suggesting that even the simplest configuration generalises strongly.}
-\label{fig:rrd}
-\end{figure}
 
 \begin{table}[t]
 \caption{Wall-Clock Training Times and Trainable Parameter Counts (3 epochs, batch=32, RTX 3050 8 GB)}
@@ -954,123 +826,115 @@ suggesting that even the simplest configuration generalises strongly.}
 \end{table}
 
 \begin{table}[t]
-\caption{Confusion Matrix for \texttt{ablation\_c} --- Seen Test Split ($N=12{,}000$; 6,000 human, 6,000 AI)}
+\caption{Confusion Matrices for \texttt{ablation\_c}}
 \label{tab:conf_seen}
 \begin{center}
 \small
-\begin{tabular}{lcc}
+\begin{tabular}{llcc}
 \toprule
- & \textbf{Pred: Human} & \textbf{Pred: AI}\\
+\textbf{Split} & \textbf{Actual} & \textbf{Pred: Human} & \textbf{Pred: AI}\\
 \midrule
-\textbf{Actual: Human} & TN = 5,461 & FP = 539\\
-\textbf{Actual: AI}    & FN = 114   & TP = 5,886\\
+\multirow{2}{*}{Seen} & Human & TN = 5,461 & FP = 539\\
+ & AI & FN = 114 & TP = 5,886\\
+\midrule
+\multirow{2}{*}{Held-out} & Human & TN = 4,622 & FP = 378\\
+ & AI & FN = 359 & TP = 4,641\\
 \bottomrule
 \end{tabular}
 
 \vspace{4pt}
-\footnotesize Derived algebraically from Precision (0.9157), Recall (0.9810), Accuracy (0.9453).
+\footnotesize Seen split: $N=12{,}000$; held-out split: $N=10{,}000$. Both are balanced 50/50.
 \end{center}
 \end{table}
 
-\begin{table}[t]
-\caption{Confusion Matrix for \texttt{ablation\_c} --- Unseen Test Split ($N=10{,}000$; 5,000 human, 5,000 AI)}
-\label{tab:conf_unseen}
-\begin{center}
-\small
-\begin{tabular}{lcc}
-\toprule
- & \textbf{Pred: Human} & \textbf{Pred: AI}\\
-\midrule
-\textbf{Actual: Human} & TN = 4,622 & FP = 378\\
-\textbf{Actual: AI}    & FN = 359   & TP = 4,641\\
-\bottomrule
-\end{tabular}
+Validation and ablation metrics are reported in Tables~\ref{tab:ablation}
+and~\ref{tab:diagnostic}. Held-out-generator generalisation holds across all
+four configurations.
+Held-out F1 ranges from 0.913 to 0.927 (Table~\ref{tab:ablation}), and RRD values span 1.1\% to
+3.1\%---well below the 5\% interpretive threshold established in
+\eqref{eq:rrd}. This answers RQ1 positively for the RAID generator split:
+representations learned from adversarially diverse seen-generator data
+transfer meaningfully to withheld generator families.
 
-\vspace{4pt}
-\footnotesize Derived algebraically from Precision (0.9243), Recall (0.9282), Accuracy (0.9261).
-\end{center}
-\end{table}
-
-Cross-attack generalisation holds across all four configurations. Unseen F1
-ranges from 0.913 to 0.927, and RRD values span 1.1\% to 3.1\%---well below
-the 5\% interpretive threshold established in \eqref{eq:rrd}. This directly
-answers RQ1 in the positive. Representations learned from character-level
-seen attacks transfer meaningfully to semantic-level unseen attacks without
-harming unseen performance.
-
-Head depth modestly raises seen-test precision at a minor cost to
-cross-attack transfer. Comparing \texttt{ablation\_a} (single head,
+Head depth modestly raises seen-test precision at a cost to
+held-out-generator transfer (Table~\ref{tab:diagnostic}). Comparing \texttt{ablation\_a} (single head,
 freeze=4) against \texttt{ablation\_b} (deep head, freeze=4) shows that
 seen F1 increases by $+$0.72~pp while unseen F1 decreases by $-$0.83~pp.
 This raises RRD from 1.51\% to 3.13\%. The deep head extracts greater
 in-distribution signal from the partially-frozen encoder, but this
-specialisation exacts a marginal cost on generalisation.
+specialisation exacts a measurable cost on held-out performance.
 
-\texttt{ablation\_c} (deep head, fully unfrozen) achieves the optimal
-balance across both splits. It records the highest seen ROC-AUC (0.9923),
-the highest unseen F1 (0.9263), the highest unseen ROC-AUC (0.9790), and a
-moderate RRD of 2.21\%. This suggests that full encoder fine-tuning permits
-the model to develop representations more conducive to cross-attack transfer
-than partial freezing allows.
+\texttt{ablation\_c} (deep head, fully unfrozen) achieves the strongest
+threshold-free held-out performance. It records the highest seen ROC-AUC
+(0.9923), the highest held-out ROC-AUC (0.9790), and a held-out F1 of
+0.9263, effectively tied with \texttt{ablation\_a}'s 0.9267. Its moderate
+RRD of 2.21\% is higher than \texttt{baseline1} and \texttt{ablation\_a},
+but lower than \texttt{ablation\_b}. This suggests that full encoder
+fine-tuning improves discriminative ranking while not necessarily minimising
+relative degradation.
 
-The confusion matrices (Tables~\ref{tab:conf_seen} and \ref{tab:conf_unseen})
-reveal a critical asymmetry across splits. On the seen split, the model
+The confusion matrices (Table~\ref{tab:conf_seen}) reveal a critical
+asymmetry across splits. On the seen split, the model
 exhibits a strong recall bias: it misses only 114~AI samples (1.9\% of AI)
 but misclassifies 539~human samples as AI (9.0\% of human). On the unseen
 split, this asymmetry partially corrects. False negatives rise to 359 (7.2\%
 of AI) and false positives fall to 378 (7.6\% of human), indicating the model
 behaves more conservatively under out-of-distribution attack types. The
 near-equal FN/FP balance on the unseen split (359 vs.\ 378) serves as a
-positive generalisation signal, proving the decision boundary shifts
+positive generalisation signal, suggesting the decision boundary shifts
 coherently rather than collapsing into a trivial class bias.
 
-Training time scales entirely with the number of trainable parameters
+Training time (Table~\ref{tab:wallclock}) scales entirely with the number of trainable parameters
 rather than classification head depth. Fully unfrozen configurations
 (\texttt{baseline1}, \texttt{ablation\_c}) require approximately 5,294~seconds.
 Partially frozen configurations (\texttt{ablation\_a}, \texttt{ablation\_b})
 require approximately 3,182~seconds. The four additional unfrozen transformer
 layers drive this 1.66$\times$ overhead.
 
-\subsubsection{PDC Optimisation Benchmark Results}
+\subsubsection{Efficiency Optimisation Benchmark Results}
+
+Figure~\ref{fig:efficiency} and Table~\ref{tab:efficiency_benchmarks} summarise the per-stage
+optimisation gains.
 
 \begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figure6_pdc_speedup.png}}
-\caption{PDC pipeline optimisation gains by test case (TC1--TC4). Bar chart
-of multiplicative speedup factors for TC1 (3.58$\times$), TC3 (3.32$\times$),
-and TC4 (2.19$\times$ throughput). TC2 increased GPU utilisation from
+\centerline{\includegraphics[width=\columnwidth]{figures/figure6_efficiency_speedup.png}}
+\caption{Pipeline optimisation gains by stage. Bar chart
+of multiplicative speedup factors for parallel preprocessing (3.58$\times$),
+AMP training with a larger batch (3.32$\times$), and AMP inference mode
+(2.19$\times$ throughput). The optimised DataLoader increased GPU utilisation from
 $\sim$30--50\% to $\sim$80--90\%+ but is not expressed as a speedup factor.
 All gains were measured on the same RTX~3050 8~GB hardware.}
-\label{fig:pdc}
+\label{fig:efficiency}
 \end{figure}
 
 \begin{table*}[t]
-\caption{PDC Benchmark Results Summary}
-\label{tab:pdc}
+\caption{Efficiency Benchmark Results Summary}
+\label{tab:efficiency_benchmarks}
 \begin{center}
 \footnotesize
 \begin{tabular}{llrrl}
 \toprule
-\textbf{Test Case} & \textbf{Metric} & \textbf{Baseline} & \textbf{Optimised} & \textbf{Gain}\\
+\textbf{Stage} & \textbf{Metric} & \textbf{Baseline} & \textbf{Optimised} & \textbf{Gain}\\
 \midrule
-TC1 --- Parallel preprocessing & Filter time (s)   & 31.83 & 8.89            & \textbf{3.58$\times$ speedup}\\
-TC1 --- Parallel preprocessing & Workers           & 1 (GIL-bound) & 11         & ---\\
-TC2 --- Optimised DataLoader   & GPU utilisation   & $\sim$30--50\% & $\sim$80--90\%+ & Significant increase\\
-TC3 --- AMP + large batch      & Train time, s     & 3,180.47 (batch=32) & 957.56 (batch=128) & \textbf{3.32$\times$ speedup}\\
-TC3 --- AMP + large batch      & Peak VRAM (MB)    & $\sim$8,000 (full) & \textbf{4,218.95} & $-$47.3\% VRAM\\
-TC4 --- AMP + inference mode   & Batch latency (ms)& 183.75 & \textbf{84.07} & \textbf{54.25\% reduction}\\
-TC4 --- AMP + inference mode   & Throughput (samp/s) & $\sim$174 & \textbf{380.64} & 2.19$\times$ throughput\\
+PP --- Parallel preprocessing & Filter time (s)   & 31.83 & 8.89            & \textbf{3.58$\times$ speedup}\\
+PP --- Parallel preprocessing & Workers           & 1 (GIL-bound) & 11         & ---\\
+DLO --- Optimised DataLoader   & GPU utilisation   & $\sim$30--50\% & $\sim$80--90\%+ & $\sim$1.6--3.0$\times$ duty cycle improvement\\
+AMP-T --- AMP + large batch      & Train time, s     & 3,180.47 (batch=32) & 957.56 (batch=128) & \textbf{3.32$\times$ speedup}\\
+AMP-T --- AMP + large batch      & Peak VRAM (MB)    & 8,000 (OOM)       & \textbf{4,218.95} & $-$47.3\% VRAM\\
+AMP-I --- AMP + inference mode   & Batch latency (ms)& 183.75 & \textbf{84.07} & \textbf{54.25\% reduction}\\
+AMP-I --- AMP + inference mode   & Throughput (samp/s) & $\sim$174 & \textbf{380.64} & 2.19$\times$ throughput\\
 \bottomrule
 \end{tabular}
 \end{center}
 \end{table*}
 
-\textbf{TC3 causal detail.} The TC3 speedup (3.32$\times$) and batch size
+\textbf{AMP-T causal detail.} The AMP-T speedup (3.32$\times$) and batch size
 increase (32$\rightarrow$128) are causally linked. AMP's FP16 activations
 halve per-example VRAM consumption, freeing sufficient headroom to run
 \texttt{batch\_size=128} on the 8~GB RTX~3050 without triggering an OOM
 error. Running \texttt{batch\_size=128} in FP32 causes an immediate crash.
 With AMP enabled, the identical loop peaks at 4,218.95~MB, sitting 47\%
-below the hardware ceiling. The composite benefit---AMP precision combined
+below the OOM threshold. The composite benefit---AMP precision combined
 with a 4$\times$ larger batch requiring fewer gradient steps per epoch---produces
 the 3.32$\times$ wall-clock speedup. On this specific hardware, AMP's memory
 efficiency yields a more practically significant benefit than its raw
@@ -1078,8 +942,11 @@ compute acceleration.
 
 \subsubsection{Fast-DetectGPT RAID Adversarial Evaluation}
 
+Figure~\ref{fig:raid_auroc} and Table~\ref{tab:raid} present Fast-DetectGPT's
+AUROC on RAID adversarial subsets.
+
 \begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figure7_raid_auroc_comparison.png}}
+\centerline{\includegraphics[width=\columnwidth]{figures/figure7_raid_auroc_comparison.png}}
 \caption{Fast-DetectGPT AUROC on RAID adversarial subsets. Paraphrase AUROC
 is near-identical across scorers ($\sim$0.787--0.789), while Homoglyph
 AUROC diverges sharply by scorer size (gpt-j-6B: 0.6689 vs.\ gpt2-xl:
@@ -1090,7 +957,7 @@ character-level Unicode corruption. The clean benchmark reference line
 \end{figure}
 
 \begin{table*}[t]
-\caption{Primary RAID Results (4-bit NF4 Quantized Scoring, 1,000 Samples per Subset)}
+\caption{Primary RAID Results (4-bit NF4 Quantised Scoring, 1,000 Samples per Subset)}
 \label{tab:raid}
 \begin{center}
 \footnotesize
@@ -1107,15 +974,8 @@ RAID paraphrase --- gpt2-xl  & Paraphrase & gpt2-xl  & \textbf{0.7893} & 0.8328 
 \end{center}
 \end{table*}
 
-\begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figure8_three_way_auroc.png}}
-\caption{Three-way AUROC comparison: original paper / reproduced baseline /
-RAID adversarial. The left two bars confirm reproduction fidelity (0.9338
-vs.\ 0.9370). The middle two bars show paraphrase degradation ($\sim$14.8~pp).
-The right two bars reveal the full severity of homoglyph attack, with gpt2-xl
-dropping to near-random performance (0.5257).}
-\label{fig:three_way}
-\end{figure}
+Table~\ref{tab:threeway} compares these adversarial AUROC values against the
+original reproduction baseline.
 
 \begin{table*}[t]
 \caption{Three-Way AUROC Comparison: Original $\rightarrow$ Reproduced $\rightarrow$ Adversarial}
@@ -1138,50 +998,33 @@ Adversarial --- Homoglyph (4-bit NF4)   & RAID homoglyph      & gpt2-xl  & 0.525
 \end{table*}
 
 \begin{table}[t]
-\caption{Robustness Relative Difference by Scoring Model}
-\label{tab:rrd_scorer}
-\begin{center}
-\small
-\begin{tabular}{lccc}
-\toprule
-\textbf{Scorer} & \textbf{AUROC (Para.)} & \textbf{AUROC (Homo.)} & \textbf{RRD (\%)}\\
-\midrule
-gpt2-xl   & 0.7893 & 0.5257 & \textbf{50.12}\\
-gpt-j-6B  & 0.7869 & 0.6689 & \textbf{17.65}\\
-\bottomrule
-\end{tabular}
-\end{center}
-\end{table}
-
-\begin{table}[t]
 \caption{Statistical Significance --- Attack-Condition Bootstrap Difference Test}
-\label{tab:stats}
 \begin{center}
 \small
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Scorer} & \textbf{$\Delta$ AUROC} & \textbf{95\% CI Low} & \textbf{95\% CI High} & \textbf{$p$-value}\\
 \midrule
-gpt2-xl  & $+$0.2637 & 0.2140 & 0.3078 & $\approx$0.000\\
-gpt-j-6B & $+$0.1181 & 0.0695 & 0.1624 & $\approx$0.000\\
+gpt2-xl  & $+$0.2637 & 0.2140 & 0.3078 & $<$0.001\\
+gpt-j-6B & $+$0.1181 & 0.0695 & 0.1624 & $<$0.001\\
 \bottomrule
 \end{tabular}
 \end{center}
 \end{table}
 
 \begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figure9_quantization_efficiency.png}}
-\caption{Quantization efficiency---inference time per sample (left) and
-estimated peak VRAM (right) across all five experimental runs. The
-3.28$\times$ speedup annotation marks the paraphrase run's substantially
-lower latency (0.818~s) relative to the reproduction baseline (2.690~s).
-The dashed orange line marks the RTX~3050's 8~GiB VRAM ceiling; all 4-bit
-NF4 runs fall well below it, confirming deployability on consumer hardware.}
+\centerline{\includegraphics[width=\columnwidth]{figures/figure9_quantization_efficiency.png}}
+\caption{Quantisation efficiency---inference time per sample (left) and
+estimated peak VRAM (right) across all experimental runs. While the 3.29$\times$ speedup 
+annotation on paraphrase latency (0.818~s vs. 2.690~s) reflects both model compression and 
+hardware transition (T4 to RTX 3050), the VRAM chart demonstrates the main benefit of 
+4-bit NF4 quantisation: all compression configurations fall safely below the RTX~3050's 
+8~GiB dedicated VRAM limit (dashed orange line), preventing OOM crashes.}
 \label{fig:quant}
 \end{figure}
 
 \begin{table*}[t]
-\caption{Efficiency: 4-bit NF4 Quantization vs.\ Reproduction Baseline}
+\caption{Efficiency: 4-bit NF4 Quantisation vs.\ Reproduction Baseline}
 \label{tab:efficiency}
 \begin{center}
 \small
@@ -1199,13 +1042,15 @@ Adversarial --- Homoglyph (NF4)    & gpt2-xl  & 2.158          & $\sim$1.8~GiB\\
 \end{center}
 \end{table*}
 
-Homoglyph attacks prove substantially more destructive than paraphrase
-attacks for both scoring models ($p \approx 0.000$ in both independent
+Figure~\ref{fig:quant} and Table~\ref{tab:efficiency} show the efficiency
+characteristics of the 4-bit NF4 quantised scoring setup.
+Homoglyph attacks are substantially more destructive than paraphrase
+attacks for both scoring models ($p < 0.001$ in both independent
 bootstrap difference tests). The \texttt{gpt2-xl} model degrades to
 near-random performance under homoglyph attack (AUROC 0.5257), whereas
 \texttt{gpt-j-6B} retains moderate discriminative ability (AUROC 0.6689).
-The \texttt{gpt2-xl} RRD of 50.12\% demonstrates that attack type---rather
-than quantization level, scoring model size, or sample domain---serves as
+The \texttt{gpt2-xl} RRD of 33.40\% demonstrates that attack type---rather
+than quantisation level, scoring model size, or sample domain---serves as
 the dominant determinant of detection difficulty under adversarial conditions.
 
 Scoring model size provides homoglyph-specific robustness that fails to
@@ -1215,75 +1060,68 @@ a difference of 0.24~pp). On the homoglyph split, this gap widens to 14.3~pp.
 The larger model's richer vocabulary representations retain discriminative
 signal even when individual tokens suffer Unicode substitution corruption.
 
-The 4-bit NF4 quantization delivers a measured 3.28$\times$ inference speedup
-on the paraphrase subset (0.818~s/sample versus the 2.690~s/sample
-reproduction baseline). Homoglyph runs execute more slowly at approximately
-2.3~s/sample. Unicode character substitutions increase effective token
-sequence complexity, partially offsetting the memory bandwidth savings
-derived from quantization. VRAM reduction relative to FP16 loading is
-estimated at approximately 75\% for \texttt{gpt-j-6B} ($\sim$14.0~GiB
-$\rightarrow$ $\sim$3.5~GiB) and 70\% for \texttt{gpt2-xl} ($\sim$6.0~GiB
-$\rightarrow$ $\sim$1.8~GiB).
+Although the measured 3.29$\times$ inference speedup on the paraphrase subset 
+(0.818~s/sample versus the 2.690~s/sample reproduction baseline) contains a hardware 
+confound due to the transition from the cloud-based Tesla~T4 to the local RTX~3050, 
+the empirical validation highlights the primary systems utility of 4-bit NF4 quantisation: 
+drastic VRAM reduction. Under identical hardware, 4-bit quantisation typically incurs 
+a slight computational overhead due to dynamic dequantisation; however, it reduces the VRAM 
+footprint by approximately 75\% for \texttt{gpt-j-6B} ($\sim$14.0~GiB $\rightarrow$ $\sim$3.5~GiB) 
+and 70\% for \texttt{gpt2-xl} ($\sim$6.0~GiB $\rightarrow$ $\sim$1.8~GiB). This critical memory saving 
+bridges the deployability gap, allowing models that would otherwise cause Out-Of-Memory (OOM) 
+failures to run comfortably within the 8~GB dedicated VRAM ceiling of consumer-grade hardware. 
+Under homoglyph attacks, execution times increase to 2.3~s/sample, as Unicode substitutions
+bypass standard tokenisation and increase per-token computation.
 
 Fast-DetectGPT's strong clean-benchmark performance does not transfer to
-adversarially attacked text, regardless of quantization efficiency.
+adversarially attacked text, regardless of quantisation efficiency.
 Adversarial training or attack-aware preprocessing remains a necessary
 requirement for detection pipelines deployed in real-world scenarios.
 
 % ---------------------------------------------------------------
 \section{Discussion}\label{sec:discussion}
 
-\subsection{Cross-Attack Generalisation: Answering RQ1}\label{ssec:rq1}
+\subsection{Held-Out-Generator Generalisation: Answering RQ1}\label{ssec:rq1}
 
-The results provide a clear, positive answer to RQ1: \emph{cross-attack
-generalisation holds at the DistilBERT 66M parameter scale}. All four
-ablation configurations achieve RRD values between 1.1\% and 3.1\%, remaining
-well within the interpretive threshold of 5\% proposed in \eqref{eq:rrd}.
-Unseen-split F1 values ranging from 0.913 to 0.927 demonstrate strong
-performance on attack types never encountered during training. This confirms
-that representations learned from character-level perturbation attacks
-(homoglyph and word substitution) transfer meaningfully to semantic-level
-unseen attacks (paraphrase and prompt-based adversarial). Addressing the
-second part of RQ1, DistilBERT's unseen-split performance (F1 0.913--0.927)
-substantially exceeds Fast-DetectGPT's adversarial AUROC under the identical
-attack types (homoglyph: 0.526--0.669; paraphrase: 0.787--0.789). This
-confirms that adversarially augmented supervised training proves more robust
-to these attack conditions than zero-shot probability-based detection.
+The results provide a positive answer to RQ1 under the RAID generator split:
+\emph{held-out-generator generalisation holds at the DistilBERT 66M parameter
+scale}. All four ablation configurations achieve RRD values between 1.1\% and
+3.1\%, remaining within the interpretive threshold of 5\% proposed in
+\eqref{eq:rrd}. Held-out F1 values ranging from 0.913 to 0.927 demonstrate
+strong performance on generator families never encountered during training.
+Addressing the second part of RQ1, DistilBERT's held-out F1 remains strong
+while Fast-DetectGPT degrades on RAID adversarial attack subsets (homoglyph:
+AUROC 0.526--0.669; paraphrase: AUROC 0.787--0.789). Because these metrics
+are not identical, the comparison should be interpreted as a directional
+robustness contrast rather than a matched head-to-head score.
 
-This outcome represents the positive generalisation scenario outlined in
-Section~\ref{sec:intro}. Critically, it does not replicate the active-harm
-pattern identified by Huang et al.~\cite{huang2024}, who found that
-adversarially augmented training can sometimes worsen cross-attack robustness
-relative to a clean-trained baseline. Multiple factors likely prevent the
-active-harm pattern from emerging here. The seen attack types (homoglyph and
-word substitution) are mechanistically diverse despite sharing a character-level
-classification, which likely discourages over-fitting to any single surface
-signature. Furthermore, DetectRL's balanced training composition prevents
-any single attack type from dominating the learned representations. Finally,
-because the unseen evaluation attacks are mechanistically distinct from both
-training attack types, the risk of over-specialised representations interfering
-with generalisation is reduced. Whether this positive transfer holds under
-more aggressive, single-attack training compositions remains an open question.
+This outcome does not by itself resolve the cross-attack active-harm pattern
+identified by Huang et al.~\cite{huang2024}, because the primary supervised
+experiment here is a held-out-generator RAID evaluation rather than a clean
+attack-family holdout. The result is nevertheless informative: adversarially
+diverse RAID training does not collapse when the source generator family
+changes. Whether the same checkpoints would preserve robustness under a
+strict attack-family holdout remains an open follow-up experiment.
 
-The generalisation performance remains notably strong even for \texttt{baseline1},
-the configuration with no layer freezing and a single-layer head (RRD 1.11\%,
-unseen F1 0.9135). The base DistilBERT encoder, fine-tuned with character-level
-adversarial data, evidently captures sufficient stylistic representations to
-transfer across the seen/unseen attack divide independently of head complexity
-or freezing strategy. The ablation study proves that architectural choices
-modulate the \emph{degree} of generalisation, not its fundamental existence.
+The generalisation performance remains notably strong even for
+\texttt{baseline1}, the configuration with no layer freezing and a single-layer
+head (RRD 1.11\%, held-out F1 0.9135). The base DistilBERT encoder evidently
+captures representations that transfer across the seen/held-out generator
+boundary independently of head complexity or freezing strategy. The ablation
+study demonstrates that architectural choices modulate the \emph{degree} of
+generalisation, not its fundamental existence.
 
 \subsection{Architectural Variable Effects: Answering RQ2}\label{ssec:rq2}
 
 RQ2 investigates how head depth and encoder fine-tuning depth independently
-affect seen performance and cross-attack robustness.
+affect seen-generator performance and held-out-generator robustness.
 
 \textbf{Effect of head depth.} Comparing \texttt{ablation\_a} (single head,
 freeze=4) against \texttt{ablation\_b} (deep head, freeze=4) at matched encoder
 depth reveals that the deep head increases seen F1 by $+$0.72~pp
 (0.9409$\rightarrow$0.9481) but raises RRD by $+$1.62~pp (1.51\%$\rightarrow$3.13\%),
-exacting a cost of $-$0.83~pp in unseen F1 (0.9267$\rightarrow$0.9184). The deep
-head extracts superior in-distribution signal at a marginal cost to cross-attack
+exacting a cost of $-$0.83~pp in held-out F1 (0.9267$\rightarrow$0.9184). The deep
+head extracts superior in-distribution signal at a marginal cost to held-out
 transfer. For deployment scenarios where seen-set precision is paramount, the
 deep head is preferable; for maximum generalisation margin, the shallow head
 with partial freezing performs better.
@@ -1291,73 +1129,80 @@ with partial freezing performs better.
 \textbf{Effect of encoder fine-tuning depth.} Comparing \texttt{ablation\_b}
 (deep head, freeze=4) against \texttt{ablation\_c} (deep head, freeze=0) at
 matched head architecture demonstrates that full unfreezing raises seen ROC-AUC
-by $+$0.15~pp (0.9908$\rightarrow$0.9923), raises unseen F1 by $+$0.79~pp
+by $+$0.15~pp (0.9908$\rightarrow$0.9923), raises held-out F1 by $+$0.79~pp
 (0.9184$\rightarrow$0.9263), and lowers RRD by $-$0.92~pp (3.13\%$\rightarrow$2.21\%).
 Full fine-tuning simultaneously improves in-distribution performance and
-cross-attack robustness. This directly contradicts the over-fitting concern that
+held-out-generator robustness. This challenges the over-fitting concern that
 typically motivates partial freezing; given this dataset size and attack
-taxonomy, the upper encoder layers actively benefit from full adaptation. The
+distribution, the upper encoder layers actively benefit from full adaptation. The
 sole trade-off is computational: unfreezing all six layers increases training
 time by 1.66$\times$ relative to partial freezing (5,295~s versus 3,180~s).
 
-\textbf{Joint recommendation.} \texttt{ablation\_c} (deep head, fully
-unfrozen) serves as the best-performing configuration across every metric except
-training efficiency. Conversely, \texttt{ablation\_b} (the officially proposed
-model) achieves the best validation F1 alongside the best VRAM efficiency. It
-completes training under AMP at 4,218.95~MB peak VRAM in 957~seconds, making
-it the only configuration capable of practical AMP batch-128 execution on an
-8~GB GPU.
+\textbf{Joint recommendation.} The ablation results do not support a single
+unqualified winner. \texttt{ablation\_b} is the validation-selected checkpoint
+and achieves the highest seen F1, making it appropriate when checkpoint
+selection and efficiency dominate. \texttt{baseline1} achieves the lowest RRD
+overall, \texttt{ablation\_a} achieves the lowest RRD among the named ablations,
+and \texttt{ablation\_c} achieves the strongest held-out ROC-AUC with nearly
+tied held-out F1. For robustness-centric reporting, \texttt{ablation\_c} and
+\texttt{ablation\_a} deserve emphasis alongside \texttt{ablation\_b}, rather
+than treating \texttt{ablation\_b} as the sole proposed model.
 
-\subsection{PDC Systems Insights}\label{ssec:pdc_insights}
+\subsection{Systems Efficiency Insights}\label{ssec:efficiency_insights}
 
-The four PDC optimisations collectively reduce the preprocessing-to-inference
+The four systems optimisations collectively reduce the preprocessing-to-inference
 pipeline runtime from approximately 2.5~hours (cold download and sequential
-processing) to under 9~seconds for preprocessing (TC1), approximately
-16~minutes for AMP training (TC3), and 84~ms/batch for inference (TC4).
+processing) to under 9~seconds for preprocessing (PP), approximately
+16~minutes for AMP training (AMP-T), and 84~ms/batch for inference (AMP-I).
 At the 120,000-sample scale, the dominant bottleneck shifts continuously
 depending on the pipeline stage. CPU-bound parallel processing governs data
-preparation (TC1); DataLoader overlap and memory bandwidth govern GPU feeding
-(TC2); and the computation-to-memory-access ratio governs training and
-inference throughput (TC3, TC4). Applying all four optimisations in
+preparation (PP); DataLoader overlap and memory bandwidth govern GPU feeding
+(DLO); and the computation-to-memory-access ratio governs training and
+inference throughput (AMP-T, AMP-I). Applying all four optimisations in
 combination eliminates the dominant bottleneck at each stage to produce
 additive performance gains.
 
-The TC3 result carries particular significance for hardware democratisation.
+The AMP-T result carries particular significance for hardware democratisation.
 AMP's FP16 activations reduce VRAM consumption from the hardware ceiling
 ($\sim$8~GB) to 4,218.95~MB. This enables a 4$\times$ batch increase that
-reduces the total gradient-step count by approximately half, ultimately
+reduces the total gradient-step count to approximately one quarter, ultimately
 yielding a 3.32$\times$ wall-clock speedup on a consumer GPU. Without AMP,
 executing \texttt{batch\_size=128} remains physically infeasible on this
 hardware. With AMP, the full experiment completes in under 16~minutes.
 
 \subsection{Fast-DetectGPT Adversarial Fragility}\label{ssec:fastdetect}
 
-The RAID adversarial results clarify a structural limitation inherent to
-probability-based zero-shot detection. Under paraphrase attack, AUROC degrades
-from 0.937 (clean) to approximately 0.789. While this represents a substantial
-14.8~pp drop, the detector retains useful discriminative ability (AUC $\gg$ 0.5).
-Under homoglyph attack, the degradation becomes severe: \texttt{gpt2-xl} drops
-to AUROC 0.5257 (near-random), and \texttt{gpt-j-6B} falls to 0.6689. The 4-bit
-NF4 quantization yields a 3.28$\times$ speed gain~\cite{dettmers2023} with no
-measurable AUROC change on paraphrase data. This demonstrates that quantization
-does not introduce additional adversarial fragility; the fragility is fundamental
-to the probabilistic scoring signal itself.
+The RAID adversarial results clarify a structural limitation inherent to probability-based 
+zero-shot detection, while also illustrating the impact of domain shift. The clean 
+baseline evaluation of 0.9370 AUROC was conducted on the original \texttt{XSum/Writing/PubMed} 
+corpora to establish replication fidelity. Evaluating the model on the clean-like RAID 
+paraphrase subset yields 0.7893 AUROC (for \texttt{gpt2-xl}) and 0.7869 AUROC (for \texttt{gpt-j-6B}). 
+This measured drop ($\sim$14.8~pp) represents a composite of both domain shift (from the 
+curated Wikipedia/PubMed domains to the heterogeneous RAID Web/Recipes corpus) and paraphrase 
+evasion. Under homoglyph attack on RAID, however, the degradation becomes severe: \texttt{gpt2-xl} 
+drops to 0.5257 AUROC (near-random), and \texttt{gpt-j-6B} falls to 0.6689 AUROC. Crucially, 
+the 4-bit NF4 quantisation yields identical AUROC performance compared to the unquantised 
+reproduction baseline on paraphrase data, demonstrating that quantisation does not compound 
+adversarial fragility; rather, the fragility is fundamental to the zero-shot scoring signal 
+itself. Furthermore, the 4-bit NF4 quantisation enables local consumer deployment with a 
+measured 3.29$\times$ per-sample speedup relative to the cloud-based FP16 reproduction baseline 
+(reflecting both model compression and local hardware acceleration)~\cite{dettmers2023}.
 
-The performance contrast between DistilBERT (F1 0.913--0.927 on paraphrase-type
-unseen attacks) and Fast-DetectGPT (AUROC 0.787 on paraphrase RAID) remains
-stark. Supervised training on a modest 120,000-sample corpus featuring
-strategically diversified adversarial attack types achieves substantially
-superior adversarial robustness at inference time compared to a state-of-the-art
-zero-shot detector facing the identical attack class.
+The performance contrast between DistilBERT's held-out-generator F1
+(0.913--0.927) and Fast-DetectGPT's adversarial RAID AUROC (0.526--0.789)
+is best read as evidence that supervised fine-tuning remains operationally
+competitive under adversarial RAID conditions. A direct matched comparison
+requires evaluating both systems on the same samples with the same metric.
 
 \subsection{Limitations}\label{ssec:limits}
 
-\textbf{Unseen attack granularity.} The current unseen evaluation aggregates
-all six unseen \texttt{data\_type} subsets (three paraphrase variants and
-two prompt-adversarial variants) into a single F1 score. It remains unresolved
-whether generalisation holds equally across \texttt{paraphrase\_dipper\_llm} and
-\texttt{prompt\_sico}, which operate via distinct mechanisms despite both
-belonging to the broader semantic-level category.
+\textbf{Attack-family granularity.} The primary DistilBERT evaluation is a
+held-out-generator split on RAID, not a strict attack-family holdout. The
+processed held-out pool records the withheld generator identity, so it does not
+support fine-grained claims about paraphrase-specific or prompt-attack-specific
+F1 for the DistilBERT detector. A future version should preserve RAID's attack
+labels in the held-out pool and report per-attack F1/AUROC in addition to
+generator-level robustness.
 
 \textbf{Hardware scope.} All DistilBERT training results originate from a
 single RTX~3050~8~GB GPU. Contemporary benchmarks like GREATER~\cite{li2025} and
@@ -1370,54 +1215,104 @@ Fast-DetectGPT reproduction to \texttt{gpt-j-6B}, necessitating the exclusion of
 \texttt{gpt-neox-20B}. Local adversarial runs successfully utilized both
 \texttt{gpt-j-6B} and \texttt{gpt2-xl} to enable cross-scorer comparison, but this
 did not replicate the full scoring model sweep present in the original publication.
-
 \textbf{VRAM estimates.} Peak VRAM figures for the RAID NF4 runs serve as
 estimates derived from published model-size parameters. Unreliable
 \texttt{torch.cuda.reset\_peak\_memory\_stats()} behaviour between sequential
 scorer loads prevented exact measurement. Actual peak VRAM may deviate from
 these estimates by up to 10--15\%.
 
+\textbf{Single-seed evaluation.} All DistilBERT ablation results
+(Table~\ref{tab:ablation}) derive from a single training run per configuration
+(seed=42). Reported values lack standard deviations or confidence intervals,
+and small numerical differences between configurations (e.g., 0.9488 vs.\
+0.9484 validation F1) may fall within run-to-run stochastic variation.
+Multi-seed replication is needed to confirm the observed performance rankings.
+
+\textbf{Absence of a clean-only training baseline.}
+Every DistilBERT
+configuration in this study is trained on adversarially augmented RAID data.
+Without a control condition trained solely on clean (direct-prompt) AI text,
+the study cannot isolate whether the observed held-out-generator robustness
+is specifically attributable to adversarial augmentation or to general
+properties of the DistilBERT fine-tuning procedure. A dedicated clean-only
+baseline evaluated on the same held-out split would enable a direct causal
+attribution of the augmentation benefit.
+
+\textbf{Human-text overlap across splits.} The training pool and held-out
+evaluation pool share 6,029 exact human-written text matches. These duplicates
+arise because the RAID corpus records the same human reference texts across
+multiple generator splits. Although the AI-text portion is strictly
+non-overlapping, the shared human samples may inflate held-out
+accuracy by reinforcing familiar human writing patterns (since every held-out
+human reference text has been seen during training). Future preprocessing
+should deduplicate human reference texts across all splits to eliminate this
+source of metric inflation.
+
 \subsection{Future Work}\label{ssec:future}
 
-Several research directions follow directly from these results. Running separate
-evaluations for each of the six unseen \texttt{data\_type} categories would reveal
-whether generalisation holds uniformly or is driven by a single, highly
-transferable attack subtype. Furthermore, replacing DistilBERT with BERT-base or
-DeBERTa-v3-base would rigorously test whether the observed 1.11--3.13\% RRD
-pattern remains specific to the distilled model scale or successfully generalises
-to full-scale encoders. Finally, the severe homoglyph vulnerability (AUROC
+Several research directions follow directly from these results. Preserving RAID
+attack labels in the held-out generator pool would allow per-attack F1/AUROC
+reporting and a strict attack-family holdout study. Furthermore, replacing
+DistilBERT with BERT-base or DeBERTa-v3-base would rigorously test whether the
+observed 1.11--3.13\% RRD pattern remains specific to the distilled model scale
+or successfully generalises to full-scale encoders. Finally, the severe
+homoglyph vulnerability (AUROC
 0.526--0.669) motivates the construction of a domain-adaptive scoring model
 trained specifically on Unicode-perturbed text to harden probabilistic pipelines.
 
 % ---------------------------------------------------------------
 \section{Conclusion}\label{sec:conclusion}
 
-We conducted a controlled empirical study evaluating cross-attack generalisation
-in supervised AI text detection at the consumer-GPU scale. A DistilBERT binary
-classifier, fine-tuned exclusively on character-level adversarial attack types,
-achieves a Relative Robustness Degradation of 1.1--3.1\% on mechanistically distinct
-unseen attacks. The model secures an unseen-split F1 between 0.913 and 0.927,
-providing a definitive, positive validation of the cross-attack generalisation
-hypothesis at the 66M parameter scale. Critically, this configuration does not
-replicate the active-harm pattern observed in prior literature. The ablation
-study demonstrates that full encoder fine-tuning simultaneously improves both
-in-distribution performance and cross-attack robustness, whereas increased
-classification head depth modestly trades generalisation for seen-set precision.
+We conducted a controlled empirical study evaluating held-out-generator
+generalisation in supervised AI text detection at the consumer-GPU scale. A
+DistilBERT binary classifier fine-tuned on adversarially diverse RAID data
+achieves a Relative Robustness Degradation of 1.1--3.1\% on withheld generator
+families. The model secures held-out F1 between 0.913 and 0.927, providing
+positive evidence that a DistilBERT-based detector can transfer across RAID
+generator families. The ablation study demonstrates that no single
+configuration dominates every criterion: \texttt{ablation\_b} is
+validation-selected, \texttt{baseline1} has the lowest RRD,
+\texttt{ablation\_a} has the lowest RRD among ablations, and
+\texttt{ablation\_c} provides the strongest held-out ROC-AUC.
 
-Four PDC optimisations facilitate this multi-configuration training workflow on
+Four systems optimisations facilitate this multi-configuration training workflow on
 a single 8~GB consumer GPU. These include parallel preprocessing (yielding a
 3.58$\times$ speedup), optimised DataLoader overlap, AMP training (yielding a
 3.32$\times$ speedup and unlocking \texttt{batch\_size=128}), and AMP inference
 mode (delivering a 54.25\% latency reduction). The auxiliary Fast-DetectGPT
-study confirms implementation fidelity (reproducing an AUROC of 0.9370 against a
-0.9338 target) and establishes that 4-bit NF4 quantization does not compound
+study verifies implementation fidelity (reproducing an AUROC of 0.9370 against a
+0.9338 target) and shows that 4-bit NF4 quantisation does not compound
 adversarial fragility. Instead, the fragility remains structurally inherent to
 the probabilistic detection signal itself.
 
-These findings carry immediate practical significance. An adversarially augmented
+These findings are practically relevant, though the comparison is inherently
+directional (the supervised and zero-shot detectors are evaluated on distinct
+RAID splits using different primary metrics: held-out F1 vs.\ adversarial
+AUROC). An adversarially augmented
 DistilBERT model at 66M parameters, trained on standard consumer hardware in
-under 16~minutes, substantially outperforms a state-of-the-art zero-shot
-probabilistic detector under identical adversarial attack conditions.
+under 16~minutes, achieves a favourable robustness margin over a zero-shot
+probabilistic detector under adversarial attack conditions.
+
+% ---------------------------------------------------------------
+\section*{Ethical Considerations}
+
+AI text detection systems can produce consequential false positives, especially
+in academic, hiring, publishing, and moderation workflows. The detector studied
+here should therefore be used only as a decision-support signal, not as sole
+evidence of misconduct or authorship. The adversarial results may also inform
+evasion attempts; for this reason, the paper reports benchmark-level attack
+categories and aggregate detector behaviour rather than operational evasion
+instructions. All experiments use public benchmark datasets and derived labels;
+no private user text or personally identifying data were collected.
+
+\section*{Data and Code Availability}
+
+The experiments use public RAID, DetectRL, and Fast-DetectGPT resources.
+Processed RAID splits are derived deterministically from the filtering and
+training scripts using the seeds and generator-family mappings reported above.
+The full project source code, configuration files, and figure-generation
+scripts are publicly available at
+\url{https://github.com/The-Immortal-Wanderer/Adversarially-Robust-AI-Text-Detection-via-Supervised-DistilBERT-Fine-Tuning}.
 
 % ---------------------------------------------------------------
 \section*{Acknowledgment}
@@ -1527,6 +1422,33 @@ Y. Li, Z. Zhang, C. Li, C. Shen, and X. Liu,
 detection with adversarial training,''
 in \textit{Proc. 63rd Annual Meeting of the Association for Computational
 Linguistics (ACL)}, 2025.
+
+\bibitem{tufts2025}
+B. Tufts, X. Zhao, and L. Li,
+``A practical examination of AI-generated text detectors for large language
+models,''
+in \textit{Findings of the Association for Computational Linguistics:
+NAACL 2025}, 2025, pp. 4839--4856.
+
+\bibitem{pedrotti2025}
+A. Pedrotti, M. Papucci, C. Ciaccio, A. Miaschi, G. Puccetti,
+F. Dell'Orletta, and A. Esuli,
+``Stress-testing machine generated text detection: Shifting language models
+writing style to fool detectors,''
+in \textit{Findings of the Association for Computational Linguistics:
+ACL 2025}, 2025, pp. 3010--3031.
+
+\bibitem{zha2025padben}
+Y. Zha, R. Min, and S. Sushmita,
+``PADBen: A comprehensive benchmark for evaluating AI text detectors against
+paraphrase attacks,''
+\textit{arXiv preprint arXiv:2511.00416}, 2025.
+
+\bibitem{baidya2026}
+M. S. Baidya, S. S. Baidya, and C. Chawla,
+``Detecting the machine: A comprehensive benchmark of AI-generated text
+detectors across architectures, domains, and adversarial conditions,''
+\textit{arXiv preprint arXiv:2603.17522}, 2026.
 
 \bibitem{wu2025survey}
 J. Wu, S. Yang, R. Zhan, Y. Yuan, L. S. Chao, and D. F. Wong,
