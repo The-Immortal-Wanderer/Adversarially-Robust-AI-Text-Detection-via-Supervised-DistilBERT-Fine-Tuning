@@ -1,0 +1,4 @@
+VERIFICATION: __init__.py files preserved
+src/training/__init__.py exists: True
+src/evaluation/__init__.py exists: True
+RESULT: PRESERVED

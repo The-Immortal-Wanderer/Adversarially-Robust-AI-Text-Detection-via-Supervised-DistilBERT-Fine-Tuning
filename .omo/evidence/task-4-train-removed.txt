@@ -1,0 +1,3 @@
+VERIFICATION: src/training/train.py removed
+RESULT: DELETED
+Test-Path result: False

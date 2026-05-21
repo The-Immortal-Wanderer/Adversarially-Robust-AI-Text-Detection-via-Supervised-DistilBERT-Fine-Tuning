@@ -1,0 +1,1 @@
+﻿Initial release: DistilBERT ablation study for AI-generated text detection with cross-attack generalization evaluation

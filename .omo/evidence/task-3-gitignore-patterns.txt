@@ -1,0 +1,77 @@
+
+
+IgnoreCase : True
+LineNumber : 21
+Line       : *.pt
+Filename   : .gitignore
+Path       : C:\Users\madha\source\repos\ANN_Project\.gitignore
+Pattern    : \.pt$
+Context    : 
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 29
+Line       : *.parquet
+Filename   : .gitignore
+Path       : C:\Users\madha\source\repos\ANN_Project\.gitignore
+Pattern    : \.parquet$
+Context    : 
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 2
+Line       : __pycache__/
+Filename   : .gitignore
+Path       : C:\Users\madha\source\repos\ANN_Project\.gitignore
+Pattern    : __pycache__
+Context    : 
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 10
+Line       : .venv/
+Filename   : .gitignore
+Path       : C:\Users\madha\source\repos\ANN_Project\.gitignore
+Pattern    : \.venv
+Context    : 
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 20
+Line       : # Model checkpoints (large weight files)
+Filename   : .gitignore
+Path       : C:\Users\madha\source\repos\ANN_Project\.gitignore
+Pattern    : checkpoints
+Context    : 
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 51
+Line       : .sisyphus/
+Filename   : .gitignore
+Path       : C:\Users\madha\source\repos\ANN_Project\.gitignore
+Pattern    : \.sisyphus
+Context    : 
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 48
+Line       : CodeFiles.zip
+Filename   : .gitignore
+Path       : C:\Users\madha\source\repos\ANN_Project\.gitignore
+Pattern    : CodeFiles
+Context    : 
+Matches    : {0}
+
+IgnoreCase : True
+LineNumber : 52
+Line       : .github/plans/
+Filename   : .gitignore
+Path       : C:\Users\madha\source\repos\ANN_Project\.gitignore
+Pattern    : \.github/plans
+Context    : 
+Matches    : {0}
+
+
+
+
