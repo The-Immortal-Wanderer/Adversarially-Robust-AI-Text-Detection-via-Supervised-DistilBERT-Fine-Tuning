@@ -3,18 +3,20 @@ train_distilbert_parallel.py — RAID edition
 
 Full training pipeline for the cross-generator generalisation study.
 Designed to run as a plain Python script (not a notebook) so that
-NUM_WORKERS=4 works correctly on Windows via multiprocessing spawn.
+NUM_WORKERS=6 utilises the full physical-core capacity of a Ryzen 5600X.
 
 TC2 PARALLEL TOKENIZATION:
     Instead of pre-tokenizing everything upfront, this script tokenizes
-    ON-THE-FLY inside DataLoader workers. With NUM_WORKERS=4, four CPU
+    ON-THE-FLY inside DataLoader workers. With NUM_WORKERS=6, six CPU
     processes tokenize batches in parallel while the GPU trains simultaneously.
     
     Timeline:
         Worker 1 → tokenize batch 2 ─┐
         Worker 2 → tokenize batch 3  ├─ happening WHILE GPU trains batch 1
         Worker 3 → tokenize batch 4  │
-        Worker 4 → tokenize batch 5 ─┘
+        Worker 4 → tokenize batch 5  │
+        Worker 5 → tokenize batch 6  │
+        Worker 6 → tokenize batch 7 ─┘
     
     This is true CPU-GPU pipeline parallelism — CPU and GPU never idle
     waiting for each other.
@@ -110,12 +112,14 @@ def seed_everything(seed: int = SEED) -> None:
 # Defined at module level so multiprocessing workers can pickle it.
 #
 # Each DataLoader worker process gets its own copy of this dataset and
-# tokenizes samples independently. With NUM_WORKERS=4:
-#   - Worker 0 handles batches 0, 4, 8, 12 ...
-#   - Worker 1 handles batches 1, 5, 9, 13 ...
-#   - Worker 2 handles batches 2, 6, 10, 14 ...
-#   - Worker 3 handles batches 3, 7, 11, 15 ...
-# All 4 workers run simultaneously on separate CPU cores while GPU trains.
+    # tokenizes samples independently. With NUM_WORKERS=6:
+    #   - Worker 0 handles batches 0, 6, 12, 18 ...
+    #   - Worker 1 handles batches 1, 7, 13, 19 ...
+    #   - Worker 2 handles batches 2, 8, 14, 20 ...
+    #   - Worker 3 handles batches 3, 9, 15, 21 ...
+    #   - Worker 4 handles batches 4, 10, 16, 22 ...
+    #   - Worker 5 handles batches 5, 11, 17, 23 ...
+    # All 6 workers run simultaneously on separate CPU cores while GPU trains.
 class OnTheFlyDataset(Dataset):
     """
     Tokenizes text on-the-fly inside DataLoader worker processes.

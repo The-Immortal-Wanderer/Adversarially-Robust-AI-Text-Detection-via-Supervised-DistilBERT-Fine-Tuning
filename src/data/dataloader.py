@@ -70,7 +70,9 @@ def get_dataloaders(
     """
     # Use default path if not provided
     if parquet_path is None:
-        parquet_path = PROCESSED_DIR / "train_pool.parquet"
+        parquet_path = PROCESSED_DIR / "raid_train_pool.parquet"
+        if not parquet_path.exists():
+            parquet_path = PROCESSED_DIR / "train_pool.parquet"
     else:
         parquet_path = Path(parquet_path)
     
@@ -181,9 +183,10 @@ def get_unseen_loader(
     Returns:
         DataLoader for unseen test set
     """
-    # Use default path if not provided
     if parquet_path is None:
-        parquet_path = PROCESSED_DIR / "test_unseen.parquet"
+        parquet_path = PROCESSED_DIR / "raid_test_unseen.parquet"
+        if not parquet_path.exists():
+            parquet_path = PROCESSED_DIR / "test_unseen.parquet"
     else:
         parquet_path = Path(parquet_path)
     
