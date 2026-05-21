@@ -1,0 +1,13 @@
+## V1 Plan Compliance Audit — 2026-05-16
+- All 10 checks passed (5 Must Have + 5 Must NOT Have)
+- Final verdict: APPROVE
+- Key verification results:
+  - ablation_a: single head, freeze=4 (correct)
+  - ablation_b: deep head, freeze=4 (correct)
+  - No .pt, .parquet files committed
+  - README training times: ~88 min / ~53 min (correct)
+  - .gitignore: all 7 required patterns present
+  - Working tree clean, no modified training scripts
+  - Research_Paper.tex: unchanged
+  - No files > 50MB staged
+  - No refactoring/deduplication beyond config fix
