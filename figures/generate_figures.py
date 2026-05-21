@@ -101,11 +101,11 @@ print("Generating Figure 3: Best-epoch Validation F1...")
 best_val_f1 = {
     'baseline1':  0.9442224442224442,
     'ablation_a': 0.9421151184564032,
-    'ablation_b': 0.9487728545544392,   # highest — selected as proposed config
+    'ablation_b': 0.9487728545544392,   # highest — validation-selected config
     'ablation_c': 0.9484021572888996,
 }
 
-cfg_labels = ['baseline1', 'ablation_a', 'ablation_b\n(proposed)', 'ablation_c']
+cfg_labels = ['baseline1', 'ablation_a', 'ablation_b\n(val-selected)', 'ablation_c']
 vals       = list(best_val_f1.values())
 bar_colors3 = [PALETTE[0], PALETTE[0], PALETTE[1], PALETTE[0]]
 
@@ -124,8 +124,8 @@ fig3.add_trace(go.Bar(
 
 # Best-config annotation arrow
 fig3.add_annotation(
-    x='ablation_b\n(proposed)', y=0.9487728545544392 + 0.006,
-    text='<b>Best config</b><br>selected for deployment',
+    x='ablation_b\n(val-selected)', y=0.9487728545544392 + 0.006,
+    text='<b>Highest validation F1</b><br>selected by checkpoint criterion',
     showarrow=True, arrowhead=2, arrowcolor=PALETTE[0],
     ax=60, ay=-40,
     font=dict(family=FONT, size=TICK_SZ, color=PALETTE[0]),
@@ -163,8 +163,8 @@ save_fig(fig3, 'figure3_best_val_f1')
 # ============================================================
 print("Generating Figure 4: Ablation Seen vs Unseen F1...")
 
-configs     = ['baseline1', 'ablation_a', 'ablation_b\n(proposed)', 'ablation_c']
-configs_leg = ['baseline1', 'ablation_a', 'ablation_b (proposed)', 'ablation_c']
+configs     = ['baseline1', 'ablation_a', 'ablation_b\n(val-selected)', 'ablation_c']
+configs_leg = ['baseline1', 'ablation_a', 'ablation_b (val-selected)', 'ablation_c']
 seen_f1     = [0.9238, 0.9409, 0.9481, 0.9472]
 unseen_f1   = [0.9135, 0.9267, 0.9184, 0.9263]
 
@@ -194,7 +194,7 @@ fig4.add_trace(go.Bar(
 fig4.update_layout(
     **PLOTLY_LAYOUT,
     title=dict(
-        text='<b>Figure 4: Seen vs. Unseen F1 Score by Ablation Configuration</b>',
+        text='<b>Figure 4: Seen-Generator vs. Held-Out-Generator F1 by Ablation Configuration</b>',
         x=0.5,
         xanchor='center'
     ),
@@ -261,13 +261,13 @@ save_fig(fig5, 'figure5_rrd_by_config')
 
 
 # ============================================================
-# FIGURE 6 — PDC Speedup Summary TC1-TC4
+# FIGURE 6 — Efficiency Speedup Summary
 # ============================================================
-print("Generating Figure 6: PDC Speedup...")
+print("Generating Figure 6: Efficiency Speedup...")
 
 # Removed TC4 latency reduction (%) because mixing x-factor and % on the same axis breaks scale.
 # 54% latency reduction = 2.18x throughput, so they represent the same gain.
-tc_labels  = ['TC1\nParallel Preprocessing', 'TC3\nAMP + Large Batch\n(Training)', 'TC4\nAMP + Inference Mode\n(Throughput)']
+tc_labels  = ['Parallel\nPreprocessing', 'AMP + Large Batch\nTraining', 'AMP + Inference Mode\nThroughput']
 speedups   = [3.58, 3.32, 2.19]
 units      = ['x speedup', 'x speedup', 'x throughput']
 colors_tc  = [PALETTE[3], PALETTE[0], PALETTE[2]]  # Orange (Preprocessing), Navy (Training), Sky Blue (Inference)
@@ -287,8 +287,8 @@ for i, (label, val, unit, color) in enumerate(zip(tc_labels, speedups, units, co
 fig6.update_layout(
     **PLOTLY_LAYOUT,
     title=dict(
-        text='<b>Figure 6: PDC Pipeline Optimisation Gains by Test Case (TC1-TC4)</b><br>'
-             '<span style="font-size:10px; color:#666666;">Note: TC2 (DataLoader Pin Memory) increased GPU utilisation from ~30% to ~90%+ (not plotted).</span>',
+        text='<b>Figure 6: Systems Efficiency Optimisation Gains</b><br>'
+             '<span style="font-size:10px; color:#666666;">Note: DataLoader pinning and workers increased GPU utilisation from ~30% to ~90%+ (not plotted).</span>',
         x=0.5,
         xanchor='center'
     ),
@@ -297,7 +297,7 @@ fig6.update_layout(
     yaxis_range=[0, 4.5],
     width=FIG_W, height=FIG_H
 )
-save_fig(fig6, 'figure6_pdc_speedup')
+save_fig(fig6, 'figure6_efficiency_speedup')
 
 
 # ============================================================
@@ -447,7 +447,7 @@ save_fig(fig8, 'figure8_three_way_auroc')
 print("Generating Figure 9: Quantization Efficiency...")
 
 run_labels_html = [
-    'A2 Baseline<br>(fp16, Kaggle T4)',
+    'Repro. Baseline<br>(fp16, Kaggle T4)',
     'Paraphrase<br>gpt-j-6B<br>(4-bit NF4)',
     'Homoglyph<br>gpt-j-6B<br>(4-bit NF4)',
     'Paraphrase<br>gpt2-xl<br>(4-bit NF4)',
@@ -482,7 +482,7 @@ fig9.add_trace(go.Bar(
 ), row=1, col=2)
 
 # Dummy traces for legend (must be added AFTER main traces to preserve axis inference)
-fig9.add_trace(go.Bar(x=[None], y=[None], name='A2 Baseline (fp16)', marker_color=PALETTE[1]), row=1, col=1)
+fig9.add_trace(go.Bar(x=[None], y=[None], name='Repro. Baseline (fp16)', marker_color=PALETTE[1]), row=1, col=1)
 fig9.add_trace(go.Bar(x=[None], y=[None], name='Paraphrase Attack (NF4)', marker_color=PALETTE[0]), row=1, col=1)
 fig9.add_trace(go.Bar(x=[None], y=[None], name='Homoglyph Attack (NF4)', marker_color=PALETTE[4]), row=1, col=1)
 
