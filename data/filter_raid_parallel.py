@@ -54,12 +54,9 @@ UNSEEN_GENERATORS: set[str] = {
 KEEP_DOMAINS: set[str] = {
     "news",
     "reddit",
-    "wikipedia",
     "recipes",
-    "abstracts",
-    "book_reports",
     "poetry",
-    "czech",
+    "abstracts",
 }
 
 TARGET_TRAIN_PER_CLASS = 60_000
