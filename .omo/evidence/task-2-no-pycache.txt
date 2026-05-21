@@ -1,0 +1,6 @@
+All __pycache__ directories deleted:
+- data/__pycache__/ — deleted
+- src/data/__pycache__/ — deleted
+- src/models/__pycache__/ — deleted
+- src/training/__pycache__/ — deleted
+Remaining: No __pycache__ directories found.

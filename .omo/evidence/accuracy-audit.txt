@@ -1,0 +1,238 @@
+=== COMPREHENSIVE ACCURACY AUDIT ===
+Date: 2026-05-16
+Auditor: Sisyphus-Junior (Prometheus Read-Only)
+
+========================================
+## README.md
+========================================
+
+[PASS] Years (2025 vs 2026):
+  - All dates reference 2026. Bibtex key `masood2026towards` matches year field `2026`. No stale 2025 references found.
+
+[PASS] Bibtex key consistency:
+  - Key `masood2026towards` — year=2026, both consistent.
+
+[PASS] Training times vs training_times.json:
+  - README: baseline1 ~88 min → JSON: 5293.68s = 88.23 min ✓
+  - README: ablation_a ~53 min → JSON: 3183.73s = 53.06 min ✓
+  - README: ablation_b ~53 min → JSON: 3180.47s = 53.01 min ✓
+  - README: ablation_c ~88 min → JSON: 5295.62s = 88.26 min ✓
+  All match within rounding.
+
+[PASS] Metric values vs summary.csv:
+  - README F1 (0.9267) = ablation_a unseen_f1 = 0.926687 ✓
+  - README ROC-AUC (0.9790) = ablation_c unseen_roc_auc = 0.978955 ≈ 0.9790 ✓
+  - README RRD (1.11%–3.13%): Calculated from summary.csv:
+    baseline1: 1.12%, ablation_a: 1.51%, ablation_b: 3.14%, ablation_c: 2.21%
+    All within stated range ✓
+  - README Fast-DetectGPT AUROC (0.937) = paper's 0.9370 ✓
+  - README speedup 3.58× = 31.83/8.89 ✓
+  - README speedup 3.32× = 3180.47/957.56 = 3.32× ✓
+
+[PASS] Ablation config table vs code:
+  - baseline1: Single head, 0 of 6 frozen → code: head_type="single", freeze_layers=0 ✓
+  - ablation_a: Single head, 4 of 6 frozen → code: head_type="single", freeze_layers=4 ✓
+  - ablation_b: Deep head, 4 of 6 frozen → code: head_type="deep", freeze_layers=4 ✓
+  - ablation_c: Deep head, 0 of 6 frozen → code: head_type="deep", freeze_layers=0 ✓
+
+[PASS] Author names: Hammad Masood, Abdul Rafay — correct spelling ✓
+
+[PASS] Affiliation: FAST-NUCES, Islamabad — correct ✓
+
+[PASS] License badge URL: `[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)` — points to LICENSE file ✓
+
+[PASS] Repository structure tree:
+  - All listed files/directories exist. Tree is representative, not exhaustive.
+  - Minor: `src/data/` listed without `__init__.py` (file missing, see Code section).
+  - Minor: `src/evaluation/` listed but `src/evaluation/evaluator.py` missing (see Code section).
+  - Minor: `sanity_check.py`, `tc4_.py`, notebooks not listed — acceptable for summary tree.
+
+[INFO] External URLs — well-formed (DetectRL, HC3, RAID, GitHub). Cannot verify live resolution in read-only mode.
+
+[PASS] Dataset descriptions:
+  - "~120,000 training samples (60K human + 60K AI)" — matches capped pool size ✓
+  - "Train (80%) / Validation (10%) / Test (10%)" — 96K/12K/12K matches ✓
+  - "Unseen evaluation set (10,000 samples)" — matches unseen_cap=10000 ✓
+
+[PASS] Hardware specs:
+  - RTX 3050 8GB, Ryzen 5600X, 32GB RAM, CUDA 12.1 — matches paper ✓
+
+[PASS] Repository URL in Setup: `https://github.com/The-Immortal-Wanderer/ai-text-detection-ablation.git` — internally consistent ✓
+
+========================================
+## Research_Paper.tex
+========================================
+
+[PASS] Mentions of removed files (train.py, grid_search.py, evaluator.py):
+  - No references found. The paper discusses modules conceptually, not by filename.
+
+[PASS] Old ablation_a/ablation_b reversed labels:
+  - Config Table I (tab:configs) matches code configs exactly. No reversal.
+
+[PASS] Bibtex years:
+  - `\bibitem{li2025}` — GREATER, ACL 2025, valid ✓
+  - `\bibitem{wu2025survey}` — Computational Linguistics 2025, valid ✓
+  - All other bibitems ≤ 2024, appropriate for citations ✓
+  - Own citation `masood2026towards` with year=2026 ✓
+
+[PASS] Hardcoded file paths (figures):
+  - figure1_architecture.png → figures/figure1_architecture.png ✓
+  - figure2_split_pipeline.png → figures/figure2_split_pipeline.png ✓
+  - figure3_best_val_f1.png → figures/figure3_best_val_f1.png ✓
+  - figure4_ablation_f1_comparison.png → figures/figure4_ablation_f1_comparison.png ✓
+  - figure5_rrd_by_config.png → figures/figure5_rrd_by_config.png ✓
+  - figure6_pdc_speedup.png → figures/figure6_pdc_speedup.png ✓
+  - figure7_raid_auroc_comparison.png → figures/figure7_raid_auroc_comparison.png ✓
+  - figure8_three_way_auroc.png → figures/figure8_three_way_auroc.png ✓
+  - figure9_quantization_efficiency.png → figures/figure9_quantization_efficiency.png ✓
+  All 9 figure files exist.
+
+========================================
+## Data Consistency (summary.csv + training_times.json)
+========================================
+
+[PASS] summary.csv values:
+  - F1 values match paper's Table III (tab:ablation) exactly ✓
+  - ROC-AUC values match paper's Table III exactly ✓
+
+[PASS] training_times.json values:
+  - baseline1: 5293.68s matches paper's Table (tab:wallclock) ✓
+  - ablation_a: 3183.73s matches paper ✓
+  - ablation_b: 3180.47s matches paper ✓
+  - ablation_c: 5295.62s matches paper ✓
+
+[PASS] best_config.json:
+  - best_ablation_name: "ablation_b" ✓
+  - config: head_type="deep", freeze_layers=4 ✓
+  - best_val_f1: 0.9487728545544392 matches summary.csv ✓
+
+[PASS] README "ablation_b proposed" claim matches best_config.json ✓
+
+[PASS] RRD calculations from summary.csv:
+  - baseline1: 1.12% (rounded in paper to 1.11%) — acceptable rounding ✓
+  - ablation_a: 1.51% (paper says 1.51%) ✓
+  - ablation_b: 3.14% (paper says 3.13%) — acceptable rounding ✓
+  - ablation_c: 2.21% (paper says 2.21%) ✓
+
+========================================
+## Code
+========================================
+
+[FAIL] `src/evaluation/__init__.py` line 3 — broken import:
+  - Contains `from .evaluator import run_evaluation`
+  - File `src/evaluation/evaluator.py` DOES NOT EXIST
+  - This will cause ImportError if anything imports `src.evaluation`
+  - No other file currently imports `src.evaluation`, so bug is latent
+  - Metrics module itself still works via direct import of `src.evaluation.metrics`
+
+[MINOR] `src/data/__init__.py` missing:
+  - Directory `src/data/` has no `__init__.py`
+  - `src/data/dataloader.py` has fallback import: `from dataset import DetectRLDataset`
+  - Works at runtime (namespace packages + fallback), but inconsistent with `src/models/`, `src/evaluation/`, `src/training/`, `src/baselines/` which all have `__init__.py`
+
+[INFO] `train_distilbert_parallel.py` docstring (line 24):
+  - Says `python train_distilbert.py` but actual filename is `train_distilbert_parallel.py`
+  - Non-functional, just a stale docstring reference
+
+[INFO] `tc3_traindistilbert.py` AMP disabled:
+  - Line 180: `with torch.cuda.amp.autocast(enabled=False):` — autocast disabled
+  - Line 222: `scaler = torch.cuda.amp.GradScaler(enabled=False)` — scaler disabled
+  - The old enabling code is commented out (lines 179, 221)
+  - Output file `ablation_b_tc3_best_fp32.pt` confirms FP32 mode
+  - This means TC3 (AMP) experiment is actually running in FP32 despite the filename and docstring claiming AMP
+
+[PASS] References to `checkpoints/` directory: No matches in any .py files ✓
+
+[PASS] References to removed modules (train.py, grid_search.py, evaluator.py): No matches in any .py files ✓
+
+[PASS] All 4 configs in `src/models/distilbert_classifier.py` match paper ✓
+
+[PASS] All 4 configs in `train_distilbert_detectrl.py` inline code match module version ✓
+
+========================================
+## Infrastructure
+========================================
+
+[PASS] environment.yml vs requirements.txt:
+  - All packages and versions match between the two files ✓
+  - PyTorch channel: pytorch 2.2.0 (env yml) vs torch==2.2.0+cu121 (pip) — equivalent ✓
+  - No missing dependencies ✓
+  - No version conflicts ✓
+
+[PASS] LICENSE file:
+  - Full Apache 2.0 text present (Sections 1-9 + Appendix boilerplate) ✓
+  - Not truncated ✓
+
+[PASS] TODO/FIXME/HACK comments:
+  - No matches found in any .py files ✓
+
+[PASS] .gitignore:
+  - Excludes .pt, .pth, .bin, .safetensors model checkpoints ✓
+  - Excludes data/raw/, data/processed/ ✓
+  - Excludes .sisyphus/, .github/plans/ (internal planning) ✓
+  - Preserves summary .csv, .json, .txt files ✓
+  - Preserves data/*.py scripts ✓
+
+[INFO] Duplicate filter scripts:
+  - `data/filter.py` and `src/data/filter.py` are near-identical copies
+  - Both resolve to same project root (different parents count)
+  - Not a bug but could cause confusion — unclear which is canonical
+
+[INFO] `fast_detectgpt.py` uses `RESULTS_DIR = ROOT_DIR / "results"` (line 29):
+  - Directory `results/` doesn't exist in repo (only `results ss/` exists)
+  - Created at runtime via `mkdir(parents=True, exist_ok=True)`
+  - Path inconsistency, not a functional bug
+
+[INFO] `artifacts/distilbert_detector_fastcheck/best_config.json`:
+  - Claims best is "ablation_a" with head_type="deep" and freeze_layers=0
+  - This contradicts the canonical config where ablation_a = (single, 4)
+  - This is from a fastcheck/smoke run, not the main experiment
+  - Not an issue for main results but could confuse if someone inspects fastcheck configs
+
+========================================
+ISSUES FOUND: 2 (functional) + 3 (minor/info)
+ALL ISSUES FIXED: NO
+RECOMMENDATION: FIX BEFORE RELEASE
+
+========================================
+## DETAILED ISSUE LIST
+========================================
+
+ISSUE 1 (HIGH) — Broken import in src/evaluation/__init__.py
+  File:      src/evaluation/__init__.py
+  Line:      3
+  Problem:   `from .evaluator import run_evaluation` imports from non-existent module
+  Impact:    ImportError if `from src.evaluation import ...` is called
+  Fix:       Either (a) delete line 3, or (b) create src/evaluation/evaluator.py with run_evaluation()
+
+ISSUE 2 (MEDIUM) — AMP disabled in tc3_traindistilbert.py
+  File:      tc3_traindistilbert.py
+  Lines:     180, 222
+  Problem:   `autocast(enabled=False)` and `GradScaler(enabled=False)` disable AMP
+             despite the script being for "TC3: Automatic Mixed Precision"
+  Impact:    Script runs in FP32, not AMP. Output saved as "fp32" confirms this.
+  Fix:       Enable AMP: change `enabled=False` to `enabled=use_amp` (or True)
+
+ISSUE 3 (LOW) — Missing src/data/__init__.py
+  File:      src/data/
+  Problem:   Directory has no __init__.py, unlike all other src/ subpackages
+  Impact:    Relative imports in src/data/dataloader.py fall back to direct import
+  Fix:       Create empty src/data/__init__.py
+
+ISSUE 4 (LOW) — Stale docstring in train_distilbert_parallel.py
+  File:      train_distilbert_parallel.py
+  Line:      24
+  Problem:   `python train_distilbert.py` should be `python train_distilbert_parallel.py`
+  Impact:    Cosmetic — wrong filename in usage comment
+  Fix:       Update docstring filename
+
+ISSUE 5 (INFO) — Non-existent results/ directory in fast_detectgpt.py
+  File:      src/baselines/fast_detectgpt.py
+  Line:      29
+  Problem:   `RESULTS_DIR = ROOT_DIR / "results"` but repo has `results ss/` (with space)
+  Impact:    Creates new `results/` directory at runtime. No functional impact.
+  Fix:       Either update path to `results ss/` or keep as-is (path is created on use)
+
+========================================
+END OF AUDIT REPORT
+========================================

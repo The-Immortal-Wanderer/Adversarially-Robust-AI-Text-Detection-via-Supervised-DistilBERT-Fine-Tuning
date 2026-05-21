@@ -1,0 +1,4 @@
+C:\Users\madha\source\repos\ANN_Project\src\models\distilbert_classifier.py:57:        "baseline1": {"head_type": "single", "freeze_layers": 0},
+C:\Users\madha\source\repos\ANN_Project\src\models\distilbert_classifier.py:58:        "ablation_a": {"head_type": "single", "freeze_layers": 4},
+C:\Users\madha\source\repos\ANN_Project\src\models\distilbert_classifier.py:59:        "ablation_b": {"head_type": "deep", "freeze_layers": 4},
+C:\Users\madha\source\repos\ANN_Project\src\models\distilbert_classifier.py:60:        "ablation_c": {"head_type": "deep", "freeze_layers": 4},
