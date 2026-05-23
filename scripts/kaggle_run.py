@@ -379,6 +379,53 @@ def save_run_log(log_path: Path, run_log: dict[str, Any]) -> None:
     print(f"[RESUME] Run log saved to {log_path}", flush=True)
 
 
+def _download_previous_run_log(
+    kaggle_mode: bool,
+    dataset_handle: str,
+    run_log_path: Path,
+) -> None:
+    """Fetch the previous session's run_log.json from the uploaded Kaggle Dataset.
+
+    Enables cross-session resume: downloads the latest published Dataset
+    version and copies its ``run_log.json`` so ``--resume`` can skip
+    already-completed ablations in the new session.
+
+    Silent on first session (no previous version).  Failures are logged
+    but never fatal — falls back to a fresh start.
+    """
+    if not kaggle_mode:
+        return
+    if run_log_path.exists():
+        # Within-session resume: log already on disk from a prior run this session.
+        return
+
+    print(f"[RESUME] Checking Dataset {dataset_handle} for previous run log...", flush=True)
+    try:
+        import kagglehub
+
+        download_path = Path(kagglehub.dataset_download(dataset_handle))
+        prev_log = download_path / "run_log.json"
+
+        if prev_log.exists():
+            run_log_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(prev_log), str(run_log_path))
+            n_completed = len(
+                json.loads(prev_log.read_text()).get("completed_ablations", {})
+            )
+            print(
+                f"[RESUME] Restored from Dataset {dataset_handle}"
+                f" ({n_completed} completed ablations)",
+                flush=True,
+            )
+        else:
+            print("[RESUME] Dataset has no run_log.json (first session).", flush=True)
+    except Exception as e:
+        # First session where the Dataset has never been uploaded to, or
+        # network issue — either way we start fresh.
+        print(f"[RESUME] Could not fetch previous run log: {e}", flush=True)
+        print("[RESUME] Starting fresh session.", flush=True)
+
+
 def is_ablation_completed(
     run_log: dict[str, Any], dataset: str, ablation: str,
     epochs: int, batch_size: int, seed: int,
@@ -475,6 +522,9 @@ def main() -> None:
     # pre-exist from a prior session while the project_root mirror is missing.
     if kaggle_mode:
         _setup_kaggle_data(project_root, data_dir)
+
+    # 2c. Cross-session resume: fetch previous run_log from Kaggle Dataset
+    _download_previous_run_log(kaggle_mode, args.kaggle_dataset, run_log_path)
 
     # 3. Load run log for resume
     run_log = load_run_log(run_log_path)
