@@ -150,7 +150,7 @@ def detect_environment() -> dict[str, Any]:
     # Paths
     if kaggle_mode:
         output_dir = Path("/kaggle/working")
-        project_root = output_dir
+        project_root = _PROJECT_ROOT
     else:
         output_dir = _PROJECT_ROOT
         project_root = _PROJECT_ROOT
@@ -447,7 +447,9 @@ def main() -> None:
     ablation_names = [args.ablation] if args.ablation else list(_DEFAULT_ABLATIONS)
 
     # Directory layout
-    artifact_dir = output_dir / "artifacts" / "distilbert_detector"
+    # Checkpoints are saved by train.py relative to project_root (CWD at subprocess time),
+    # so artifact_dir must point there, not to output_dir.
+    artifact_dir = project_root / "artifacts" / "distilbert_detector"
     results_dir = output_dir / "results"
     run_log_path = Path(args.run_log_path) if args.run_log_path else output_dir / "run_log.json"
     data_dir = output_dir / "data" / "processed"
