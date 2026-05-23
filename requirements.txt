@@ -1,12 +1,14 @@
 --extra-index-url https://download.pytorch.org/whl/cu121
 
-accelerate==0.30.1
-datasets==2.19.0
-matplotlib==3.8.4
-numpy==1.26.4
-pandas==2.2.2
-scikit-learn==1.4.2
-seaborn==0.13.2
-torch==2.2.0+cu121
-tqdm==4.66.4
-transformers==4.40.0
+accelerate>=0.30.0
+datasets>=2.19.0
+matplotlib>=3.8.0
+numpy>=1.26.0
+pandas>=2.2.0
+pyarrow>=14.0            # parquet I/O (comes with pandas but explicit for Kaggle)
+pyyaml>=6.0              # config/config.py YAML loader
+scikit-learn>=1.4.0
+seaborn>=0.13.0
+torch>=2.2.0             # no +cu121 suffix — Kaggle handles CUDA separately
+tqdm>=4.66.0
+transformers>=4.40.0

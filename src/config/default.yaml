@@ -1,0 +1,89 @@
+# =============================================================================
+# ANN_Project — Central Configuration (default.yaml)
+# =============================================================================
+# DistilBERT-based AI text detection ablation study config.
+# All paths are relative to the project root (where this file lives under config/).
+# Override any value via CLI: python script.py --data.batch_size 64
+# =============================================================================
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+data:
+  # Dataset to use: "raid" or "detectrl"
+  dataset: raid
+
+  # Tokenization mode: "on_the_fly" (per-worker lazy, default) or "cached" (pre-tokenised .pt)
+  tokenization_mode: on_the_fly
+
+  # Processed data directory (null = auto-resolve to <project_root>/data/processed)
+  processed_dir: null
+
+  # Samples per class for training (60k human + 60k AI = 120k total)
+  samples_per_class: 60000
+
+  # Cap for unseen evaluation set
+  unseen_cap: 10000
+
+  # Max token sequence length (DistilBERT: 512 max)
+  max_length: 256
+
+# ── Training ──────────────────────────────────────────────────────────────────
+training:
+  # Reproducibility
+  seed: 42
+
+  # Number of training epochs
+  epochs: 3
+
+  # Batch size per GPU
+  batch_size: 32
+
+  # Peak learning rate (AdamW)
+  lr: 0.00002  # 2e-5
+
+  # Weight decay for AdamW
+  weight_decay: 0.01
+
+  # Max gradient norm for clipping
+  grad_clip_norm: 1.0
+
+  # DataLoader workers (Ryzen 5600X: 6 physical cores → 6 workers)
+  num_workers: 6
+
+  # Pin memory for faster CPU→GPU transfer
+  pin_memory: true
+
+  # Batches each worker prefetches ahead
+  prefetch_factor: 2
+
+  # Automatic Mixed Precision (AMP) via torch.cuda.amp
+  use_amp: false
+
+# ── Ablations ─────────────────────────────────────────────────────────────────
+ablations:
+  # 2×2 design: head depth × freeze strategy
+  baseline1:
+    head_type: single     # Linear(768→2)
+    freeze_layers: 0      # Fully fine-tuned
+  ablation_a:
+    head_type: single     # Linear(768→2)
+    freeze_layers: 4      # Freeze layers 0-3
+  ablation_b:
+    head_type: deep       # Linear(768→384) → GELU → Dropout → Linear(384→2)
+    freeze_layers: 4      # Freeze layers 0-3 (proposed config)
+  ablation_c:
+    head_type: deep       # Linear(768→384) → GELU → Dropout → Linear(384→2)
+    freeze_layers: 0      # Fully fine-tuned
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+  # Artifact output directory (checkpoints, summaries)
+  artifact_dir: artifacts/distilbert_detector
+
+  # Fallback checkpoint paths for inference / evaluation
+  checkpoint_fallbacks:
+    - artifacts/distilbert_detector/raid_baseline1_best.pt
+    - artifacts/distilbert_detector/baseline1_best.pt
+    - artifacts/distilbert_detector/raid_ablation_b_best.pt
+    - artifacts/distilbert_detector/ablation_b_best.pt
+    - artifacts/distilbert_detector/raid_ablation_c_best.pt
+    - artifacts/distilbert_detector/ablation_c_best.pt

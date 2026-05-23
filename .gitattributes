@@ -1,0 +1,21 @@
+# Auto-normalize line endings — convert CRLF → LF on commit
+* text=auto
+
+# Python source: always LF
+*.py   text eol=lf
+
+# YAML configs
+*.yaml text eol=lf
+*.yml  text eol=lf
+
+# Documentation
+*.md   text eol=lf
+
+# Batch files: keep CRLF
+*.bat  text eol=crlf
+
+# Binary files — no conversion
+*.png  binary
+*.jpg  binary
+*.pt   binary
+*.parquet binary
