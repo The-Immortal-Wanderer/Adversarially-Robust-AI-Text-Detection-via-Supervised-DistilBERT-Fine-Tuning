@@ -1,26 +1,24 @@
 """
 Process a downloaded RAID parquet file and produce the filtered training/eval pools.
 
-This version matches the logic of process_raid_raw.py, but it processes parquet
-batches in parallel with a process pool so batch filtering can use multiple CPU
-cores while still reading only the local downloaded parquet file.
+This script mirrors the filtering logic from the streaming RAID downloader, but it
+starts from a locally downloaded parquet file and reads it in batches so it does
+not try to load the full raw dataset into memory at once.
 
 Default input:
     data/raw/raid_full.parquet
 
 Outputs:
-    data/processed/train_pool.parquet
-    data/processed/test_unseen.parquet
+    data/processed/raid_train_pool.parquet
+    data/processed/raid_test_unseen.parquet
 
 Run:
-    python data/process_raid_raw_parallel.py
+    python src/data/processing/filter_raid_sequential.py
 """
 
 from __future__ import annotations
 
 import argparse
-import concurrent.futures as cf
-import os
 import time
 from pathlib import Path
 
@@ -31,7 +29,7 @@ try:
 except ImportError as exc:
     raise ImportError("Run: pip install pyarrow pandas") from exc
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = Path(__file__).resolve().parents[3]  # from src/data/processing/ → project root
 RAW_DIR = ROOT_DIR / "data" / "raw" / "raid"
 PROCESSED_DIR = ROOT_DIR / "data" / "processed"
 RANDOM_SEED = 42
@@ -62,99 +60,68 @@ KEEP_DOMAINS: set[str] = {
 TARGET_TRAIN_PER_CLASS = 60_000
 TARGET_UNSEEN_PER_CLASS = 10_000
 
-PARALLEL_BATCH_SIZE = 50_000
-DEFAULT_WORKERS = 6
-
 
 def _label_from_model(model_value: object) -> int:
     """
     RAID has no label column.
-    Label is derived from model column:
-      model == 'human' → 0
-      anything else    → 1
+    Label is derived from the model column:
+      model == 'human' → label 0 (human)
+      anything else    → label 1 (AI)
     """
     return 0 if str(model_value).strip().lower() == "human" else 1
 
 
-def _normalize_batch(batch_df: pd.DataFrame) -> tuple[list[dict[str, object]], int]:
-    rows: list[dict[str, object]] = []
-    total_rows = len(batch_df)
-
-    for _, row in batch_df.iterrows():
-        model_name = str(row.get("model", "")).strip().lower()
-        label      = _label_from_model(model_name)
-        domain     = str(row.get("domain", "")).strip().lower()
-        attack     = str(row.get("attack", "none")).strip().lower()
-        text       = str(row.get("generation", "")).strip()
-
-        if not text or domain not in KEEP_DOMAINS:
-            continue
-
-        if label == 0:
-            rows.append({
-                "text":        text,
-                "label":       0,
-                "domain":      domain,
-                "generator":   "human",
-                "attack_type": "human",
-            })
-            continue
-
-        generator_key = None
-        for generator_name in SEEN_GENERATORS | UNSEEN_GENERATORS:
-            if generator_name in model_name:
-                generator_key = generator_name
-                break
-        if generator_key is None:
-            continue
-
-        rows.append({
-            "text":        text,
-            "label":       1,
-            "domain":      domain,
-            "generator":   generator_key,
-            "attack_type": attack if attack != "none" else "direct_prompt",
-        })
-
-    return rows, total_rows
-
-
-def _load_raw_parquet(path: Path, workers: int) -> pd.DataFrame:
+def _load_raw_parquet(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Raw RAID parquet not found: {path}")
-
     print(f"Streaming raw RAID parquet from {path}", flush=True)
-    print(f"Parallel workers: {workers}", flush=True)
     parquet_file = pq.ParquetFile(path)
 
-    filtered_rows: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     total_rows = 0
 
-    with cf.ProcessPoolExecutor(max_workers=workers) as executor:
-        pending: set[cf.Future[tuple[list[dict[str, object]], int]]] = set()
+    for batch_index, batch in enumerate(parquet_file.iter_batches(batch_size=50_000), start=1):
+        batch_df = batch.to_pandas()
+        total_rows += len(batch_df)
 
-        def drain_one() -> None:
-            nonlocal total_rows
-            done, _ = cf.wait(pending, return_when=cf.FIRST_COMPLETED)
-            for future in done:
-                pending.remove(future)
-                rows, batch_total = future.result()
-                filtered_rows.extend(rows)
-                total_rows += batch_total
+        for _, row in batch_df.iterrows():
+            model_name = str(row.get("model", "")).strip().lower()
+            label      = _label_from_model(model_name)
+            domain     = str(row.get("domain", "")).strip().lower()
+            attack     = str(row.get("attack", "none")).strip().lower()
+            text       = str(row.get("generation", "")).strip()
 
-        for batch in parquet_file.iter_batches(batch_size=PARALLEL_BATCH_SIZE):
-            batch_df = batch.to_pandas()
-            pending.add(executor.submit(_normalize_batch, batch_df))
+            if not text or domain not in KEEP_DOMAINS:
+                continue
 
-            if len(pending) >= workers * 2:
-                drain_one()
+            if label == 0:
+                rows.append({
+                    "text":        text,
+                    "label":       0,
+                    "domain":      domain,
+                    "generator":   "human",
+                    "attack_type": "human",
+                })
+                continue
 
-        for future in pending:
-            rows, batch_total = future.result()
-            filtered_rows.extend(rows)
-            total_rows += batch_total
+            # AI row — match against known generators
+            generator_key = None
+            for generator_name in SEEN_GENERATORS | UNSEEN_GENERATORS:
+                if generator_name in model_name:
+                    generator_key = generator_name
+                    break
+            if generator_key is None:
+                continue
 
-    filtered_df = pd.DataFrame(filtered_rows)
+            rows.append({
+                "text":        text,
+                "label":       1,
+                "domain":      domain,
+                "generator":   generator_key,
+                "attack_type": attack if attack != "none" else "direct_prompt",
+            })
+
+    filtered_df = pd.DataFrame(rows)
     print(f"Loaded and filtered {total_rows:,} raw rows", flush=True)
     print(f"Filtered rows kept: {len(filtered_df):,}", flush=True)
     return filtered_df
@@ -214,7 +181,8 @@ def _build_unseen_pool(df: pd.DataFrame) -> pd.DataFrame:
     pool = pd.concat([human_sample, ai_sample], ignore_index=True).sample(
         frac=1, random_state=RANDOM_SEED
     )
-    pool["attack_type"] = pool["generator"].where(pool["label"] == 1, other="human")
+    # attack_type preserved from _filter_row — do NOT overwrite with generator
+    # pool["attack_type"] = pool["generator"].where(pool["label"] == 1, other="human")
 
     print(f"\nFinal UNSEEN pool: {len(pool):,} rows", flush=True)
     print(pool["label"].value_counts().to_string(), flush=True)
@@ -224,7 +192,7 @@ def _build_unseen_pool(df: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> None:
     start_time = time.perf_counter()
-    parser = argparse.ArgumentParser(description="Filter a downloaded RAID parquet into processed pools using parallel batch processing")
+    parser = argparse.ArgumentParser(description="Filter a downloaded RAID parquet into processed pools")
     parser.add_argument(
         "--input",
         type=Path,
@@ -237,15 +205,9 @@ def main() -> None:
         default=PROCESSED_DIR,
         help="Output directory for processed parquet files",
     )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=DEFAULT_WORKERS,
-        help="Number of worker processes to use",
-    )
     args = parser.parse_args()
 
-    filtered_df = _load_raw_parquet(args.input, workers=max(1, args.workers))
+    filtered_df = _load_raw_parquet(args.input)
 
     print("\nOverall label distribution:", flush=True)
     print(filtered_df["label"].value_counts().to_string(), flush=True)
@@ -253,7 +215,10 @@ def main() -> None:
     print(filtered_df["generator"].value_counts().to_string(), flush=True)
 
     train_pool = _build_train_pool(filtered_df)
-    unseen_pool = _build_unseen_pool(filtered_df)
+    # Exclude human texts used in training from unseen pool to prevent contamination
+    train_human_texts = set(train_pool[train_pool["label"] == 0]["text"])
+    filtered_for_unseen = filtered_df[~filtered_df["text"].isin(train_human_texts)]
+    unseen_pool = _build_unseen_pool(filtered_for_unseen)
 
     args.processed_dir.mkdir(parents=True, exist_ok=True)
     train_path = args.processed_dir / "raid_train_pool.parquet"

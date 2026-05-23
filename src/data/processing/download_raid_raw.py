@@ -6,7 +6,7 @@ then writes it to a single parquet file on disk.
 
 Run:
     pip install datasets pyarrow zstandard
-    python download_raid_full.py
+    python src/data/processing/download_raid_raw.py
 """
 
 from __future__ import annotations
@@ -21,9 +21,9 @@ def download_full_raid(hf_repo: str = "liamdugan/raid", output_path: Path | None
     except ImportError as exc:
         raise ImportError("Run: pip install datasets pyarrow zstandard") from exc
 
-    root_dir = Path(__file__).resolve().parent
+    root_dir = Path(__file__).resolve().parents[3]  # from src/data/processing/ → project root
     if output_path is None:
-        output_path = root_dir / "raw" / "raid" / "raid_full.parquet"
+        output_path = root_dir / "data" / "raw" / "raid" / "raid_full.parquet"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
