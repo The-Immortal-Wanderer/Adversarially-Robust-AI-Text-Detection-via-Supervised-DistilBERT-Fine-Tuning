@@ -487,7 +487,7 @@ within 8~GB VRAM in the main ablation run.
 
 \textbf{Optimiser and regularisation.} We train all configurations using the
 AdamW optimiser at a learning rate of $2 \times 10^{-5}$ and weight decay of 0.01,
-minimising CrossEntropyLoss over two-class softmax outputs. Gradients are clipped
+minimising CrossEntropyLoss over two-class softmax outputs. After softmax normalization, class prediction follows argmax over the two probability outputs, equivalent to a 0.5 threshold on the binary posterior probability for class 1. Gradients are clipped
 to a maximum L2~norm of 1.0 to prevent instability in early epochs. Each
 configuration runs for 3~epochs. A global random seed of 42 is applied across
 Python, NumPy, PyTorch, and CUDA for exact reproducibility.
@@ -512,7 +512,7 @@ Degradation (RRD):
 Lower RRD indicates superior held-out-generator generalisation. Following an interpretive heuristic (no established significance
 criterion exists in the literature), an RRD below 5\%
 indicates meaningful transfer of robustness; an RRD exceeding 10--15\% indicates
-that generalisation has failed.
+that generalisation has failed. This threshold is chosen descriptively to contextualise observed RRD values and does not reflect formal significance testing; see \ref{ssec:limits} for this limitation.
 
 \subsection{Systems Optimisations (PP--AMP-I)}
 
@@ -783,6 +783,7 @@ the Fast-DetectGPT RAID adversarial evaluation.
 \texttt{ablation\_b} (val-selected)  & \textbf{0.9488} & \textbf{0.9481} & 0.9908 & 0.9184 & 0.9743 & 3.13\\
 \texttt{ablation\_c}             & 0.9484 & 0.9472 & \textbf{0.9923} & \textbf{0.9263} & \textbf{0.9790} & 2.21\\
 \bottomrule
+\multicolumn{7}{l}{\footnotesize All metrics from single-seed evaluation (seed=42); reported for directional comparison only.}\\
 \end{tabular}
 \end{center}
 \end{table*}

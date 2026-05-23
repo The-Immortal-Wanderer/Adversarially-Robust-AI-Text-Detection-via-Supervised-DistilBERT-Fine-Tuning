@@ -1,8 +1,0 @@
-{
-  "best_ablation_name": "ablation_b",
-  "config": {
-    "head_type": "deep",
-    "freeze_layers": 4
-  },
-  "best_val_f1": 0.9487728545544392
-}
