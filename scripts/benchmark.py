@@ -1,50 +1,47 @@
+"""Inference latency benchmark for DistilBertClassifier on RAID dataset.
+
+Evaluates forward-pass latency under torch.amp.autocast for a single
+ablation configuration. Designed for RTX 3050 / 4050 / Kaggle GPUs.
+
+Usage:
+    python scripts/benchmark.py
+
+Output:
+    Prints average latency (ms) over 100 iterations.
+    If no checkpoint is found, train first with:
+      python scripts/train.py --dataset raid --ablation ablation_b
+"""
+
+import sys
 import torch
 import time
-import torch.nn as nn
 from pathlib import Path
-from transformers import DistilBertModel
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from src.models import DistilBertClassifier
 
 # -- Config --
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-POSSIBLE_PATHS = [
-    Path("artifacts/distilbert_detector_tc3/raid_ablation_b_tc3_best_fp32.pt"),
-    Path("artifacts/distilbert_detector_tc3/ablation_b_tc3_best.pt"),
-    Path("artifacts/distilbert_detector_tc3/raid_ablation_b_tc3_best.pt"),
-]
-CHECKPOINT_PATH = None
-for p in POSSIBLE_PATHS:
-    if p.exists():
-        CHECKPOINT_PATH = p
-        break
+# Unified checkpoint fallback: try standard artifact paths from all training scripts
+# Unified checkpoint resolution: try all known artifact paths.
+# Checkpoints saved by scripts/train.py use:
+# {artifact_dir}/{dataset}_{ablation_name}_best.pt
+ARTIFACT_DIR = Path("artifacts") / "distilbert_detector"
+DATASET = "raid"
+ABLATION = "ablation_b"
+CHECKPOINT_PATH = ARTIFACT_DIR / f"{DATASET}_{ABLATION}_best.pt"
+if not CHECKPOINT_PATH.exists():
+    CHECKPOINT_PATH = ARTIFACT_DIR / f"{ABLATION}_best.pt"
+    if not CHECKPOINT_PATH.exists():
+        CHECKPOINT_PATH = None
 
 TOKENIZER_NAME  = "distilbert-base-uncased"
 BATCH_SIZE = 32 # Increased to 32 to actually stress the RTX 3050
 SEQ_LENGTH = 256
 NUM_TRIALS = 100
-
-class DistilBertClassifier(nn.Module):
-    def __init__(self, head_type: str = "single", freeze_layers: int = 0):
-        super().__init__()
-        self.head_type = head_type
-        self.distilbert = DistilBertModel.from_pretrained(TOKENIZER_NAME)
-        hidden = self.distilbert.config.hidden_size
-
-        if head_type == "single":
-            self.classifier = nn.Sequential(nn.Dropout(0.3), nn.Linear(hidden, 2))
-        else:
-            self.classifier = nn.Sequential(
-                nn.Dropout(0.3), nn.Linear(hidden, 384), nn.GELU(), nn.Dropout(0.2), nn.Linear(384, 2)
-            )
-        self._freeze_layers()
-
-    def _freeze_layers(self) -> None:
-        for param in self.distilbert.parameters():
-            param.requires_grad = False
-
-    def forward(self, input_ids, attention_mask):
-        out = self.distilbert(input_ids=input_ids, attention_mask=attention_mask)
-        cls = out.last_hidden_state[:, 0, :]
-        return self.classifier(cls)
 
 def benchmark(model, input_ids, mask, description="Model"):
     # Warm-up
@@ -70,13 +67,14 @@ def benchmark(model, input_ids, mask, description="Model"):
 
 def main():
     if CHECKPOINT_PATH is None:
-        print("Error: Could not find checkpoint in any of the candidate paths:")
-        for p in POSSIBLE_PATHS:
-            print(f"  - {p}")
-        return
+        raise FileNotFoundError(
+            f"Checkpoint not found at '{ARTIFACT_DIR / f'{DATASET}_{ABLATION}_best.pt'}'.\n\n"
+            "Train a model first:\n"
+            "  python scripts/train.py --dataset raid --ablation ablation_b"
+        )
 
     print(f"Loading model on {DEVICE}...")
-    checkpoint = torch.load(CHECKPOINT_PATH, weights_only=False)
+    checkpoint = torch.load(CHECKPOINT_PATH, weights_only=True)
     model = DistilBertClassifier(**checkpoint['config']).to(DEVICE)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
@@ -85,7 +83,7 @@ def main():
     dummy_input = torch.randint(0, 30522, (BATCH_SIZE, SEQ_LENGTH)).to(DEVICE)
     dummy_mask = torch.ones((BATCH_SIZE, SEQ_LENGTH), dtype=torch.long).to(DEVICE)
 
-    print(f"\n--- Running TC4 Benchmark (Batch Size: {BATCH_SIZE}) ---")
+    print(f"\n--- Running Inference Benchmark (Batch Size: {BATCH_SIZE}) ---")
     
     # Baseline: Standard FP32 (No Autocast)
     print("Testing Baseline (FP32)...")
@@ -99,11 +97,11 @@ def main():
     print(f"Baseline FP32 Latency: {baseline_ms:.2f} ms")
 
     # Optimized: AMP + Inference Mode
-    print("\nTesting Optimized (TC4: AMP + Inference Mode)...")
-    optimized_ms = benchmark(model, dummy_input, dummy_mask, "TC4 Optimized")
+    print("\nTesting Optimized (AMP + Inference Mode)...")
+    optimized_ms = benchmark(model, dummy_input, dummy_mask, "AMP + Inference Mode")
 
     speedup = (baseline_ms - optimized_ms) / baseline_ms * 100
-    print(f"\n[TC4 RESULT] Latency Reduction: {speedup:.2f}%")
+    print(f"\n[RESULT] Latency Reduction: {speedup:.2f}%")
     print(f"Throughput: {1000/optimized_ms * BATCH_SIZE:.2f} samples/sec")
 
 if __name__ == "__main__":

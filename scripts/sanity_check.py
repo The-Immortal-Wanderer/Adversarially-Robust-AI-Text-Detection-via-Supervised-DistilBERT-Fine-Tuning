@@ -1,3 +1,8 @@
+"""Quick environment sanity checks — library versions and GPU availability.
+
+Usage:
+    python scripts/sanity_check.py
+"""
 import torch
 
 import accelerate

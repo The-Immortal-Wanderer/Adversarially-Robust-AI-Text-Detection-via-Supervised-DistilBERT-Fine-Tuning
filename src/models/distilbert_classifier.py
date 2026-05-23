@@ -1,6 +1,9 @@
-from __future__ import annotations
+"""DistilBERT-based classifier for AI-generated text detection.
 
-from typing import Any
+Provides the primary detection model: DistilBertClassifier with configurable
+head type (single / deep) and layer freezing for ablation experiments.
+"""
+from __future__ import annotations
 
 import torch
 import torch.nn as nn
@@ -37,8 +40,9 @@ class DistilBertClassifier(nn.Module):
         self._freeze_layers()
 
     def _freeze_layers(self) -> None:
-        for parameter in self.distilbert.embeddings.parameters():
-            parameter.requires_grad = False
+        if self.freeze_layers > 0:
+            for parameter in self.distilbert.embeddings.parameters():
+                parameter.requires_grad = False
 
         for layer_index, layer in enumerate(self.distilbert.transformer.layer):
             requires_grad = layer_index >= self.freeze_layers
@@ -50,19 +54,6 @@ class DistilBertClassifier(nn.Module):
         cls_hidden_state = outputs.last_hidden_state[:, 0, :]
         logits = self.classifier(cls_hidden_state)
         return logits
-
-
-def get_model_config(ablation: str) -> dict[str, Any]:
-    configs: dict[str, dict[str, Any]] = {
-        "baseline1": {"head_type": "single", "freeze_layers": 0},
-        "ablation_a": {"head_type": "single", "freeze_layers": 4},
-        "ablation_b": {"head_type": "deep", "freeze_layers": 4},
-        "ablation_c": {"head_type": "deep", "freeze_layers": 0},
-    }
-    if ablation not in configs:
-        raise ValueError(f"Unknown ablation: {ablation}")
-    return configs[ablation]
-
 
 def count_trainable_parameters(model: nn.Module) -> int:
     return sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)

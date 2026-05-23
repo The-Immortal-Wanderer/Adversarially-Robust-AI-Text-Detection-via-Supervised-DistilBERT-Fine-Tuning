@@ -4,9 +4,11 @@ DetectRL Dataset class for tokenization and on-the-fly processing.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import torch
 from torch.utils.data import Dataset
-from transformers import PreTrainedTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizer
 
 
 class DetectRLDataset(Dataset):
@@ -80,4 +82,76 @@ class DetectRLDataset(Dataset):
             "input_ids": encoding["input_ids"].squeeze(0),
             "attention_mask": encoding["attention_mask"].squeeze(0),
             "labels": torch.tensor(label, dtype=torch.long),
+        }
+
+
+class OnTheFlyDataset(Dataset):
+    """Tokenizes text on-the-fly inside DataLoader worker processes.
+
+    Each worker process lazily loads its own tokenizer instance to avoid
+    pickling the tokenizer across process boundaries.  With NUM_WORKERS>1
+    this creates true CPU-GPU pipeline parallelism.
+    """
+
+    def __init__(
+        self,
+        texts: list[str],
+        labels: list[int],
+        tokenizer_name: str = "distilbert-base-uncased",
+        max_length: int = 256,
+    ) -> None:
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer_name = tokenizer_name
+        self.max_length = max_length
+        self._tokenizer = None
+
+    def _get_tokenizer(self) -> AutoTokenizer:
+        if self._tokenizer is None:
+            self._tokenizer = AutoTokenizer.from_pretrained(
+                self.tokenizer_name, local_files_only=False
+            )
+        return self._tokenizer
+
+    def __len__(self) -> int:
+        return len(self.labels)
+
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+        tokenizer = self._get_tokenizer()
+        enc = tokenizer(
+            self.texts[idx],
+            max_length=self.max_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+        )
+        return {
+            "input_ids": enc["input_ids"].squeeze(0),
+            "attention_mask": enc["attention_mask"].squeeze(0),
+            "labels": torch.tensor(self.labels[idx], dtype=torch.long),
+        }
+
+
+class CachedTensorDataset(Dataset):
+    """Loads pre-tokenized tensors from a .pt file.  __getitem__ is O(1).
+
+    Used in ``cached`` tokenization mode: the entire dataset is tokenized
+    once and saved to disk, then DataLoader workers serve pre-computed
+    tensors with minimal per-sample overhead.
+    """
+
+    def __init__(self, pt_path: Path) -> None:
+        data = torch.load(pt_path, map_location="cpu", weights_only=True)
+        self.input_ids = data["input_ids"]
+        self.attention_mask = data["attention_mask"]
+        self.labels = data["labels"]
+
+    def __len__(self) -> int:
+        return len(self.labels)
+
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+        return {
+            "input_ids": self.input_ids[idx],
+            "attention_mask": self.attention_mask[idx],
+            "labels": self.labels[idx],
         }

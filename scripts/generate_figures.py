@@ -3,7 +3,7 @@ Research Paper Figure Generation Script
 Figures 4-9: Python-based charts using Plotly and Seaborn
 All data values extracted verbatim from result documents.
 
-Run from: c:/Users/madha/source/repos/ANN_Project/
+Run from: <project_root>/
 Output:   figures/figure_N_*.png  (300 DPI)
           figures/figure_N_*.html (interactive Plotly)
 
@@ -11,14 +11,10 @@ Requirements:
     pip install plotly kaleido seaborn matplotlib pandas numpy
 """
 
-import os
-import numpy as np
+from pathlib import Path
 import plotly.graph_objects as go
-import plotly.io as pio
 from plotly.subplots import make_subplots
-import seaborn as sns
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 
 # ============================================================
 # SHARED FIGURE DESIGN SYSTEM — apply to ALL figures
@@ -36,8 +32,8 @@ DPI       = 300
 FIG_W     = 900
 FIG_H     = 560
 
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__))
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "figures"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Plotly global template
 PLOTLY_LAYOUT = dict(
@@ -73,8 +69,8 @@ BASE_LEGEND = dict(
 
 
 def save_fig(fig, name, plotly=True):
-    html_path = os.path.join(OUTPUT_DIR, f"{name}.html")
-    png_path  = os.path.join(OUTPUT_DIR, f"{name}.png")
+    html_path = OUTPUT_DIR / f"{name}.html"
+    png_path  = OUTPUT_DIR / f"{name}.png"
     if plotly:
         fig.write_html(html_path)
         try:
