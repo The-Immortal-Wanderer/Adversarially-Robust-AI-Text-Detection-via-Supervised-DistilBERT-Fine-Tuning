@@ -233,15 +233,23 @@ def install_deps(kaggle_mode: bool, requirements_path: Path) -> None:
 
 def _print_package_versions() -> None:
     """Print versions of key Python packages."""
-    packages = ["torch", "transformers", "numpy", "pandas", "sklearn", "pyyaml"]
+    # PyPI name to Python import name mapping
+    packages: dict[str, str] = {
+        "torch": "torch",
+        "transformers": "transformers",
+        "numpy": "numpy",
+        "pandas": "pandas",
+        "sklearn": "sklearn",
+        "pyyaml": "yaml",
+    }
     print("[DEPS] Key package versions:", flush=True)
-    for pkg in packages:
+    for display_name, import_name in packages.items():
         try:
-            mod = __import__(pkg)
+            mod = __import__(import_name)
             ver = getattr(mod, "__version__", "unknown")
-            print(f"  {pkg:<20s} {ver}", flush=True)
+            print(f"  {display_name:<20s} {ver}", flush=True)
         except ImportError:
-            print(f"  {pkg:<20s} NOT INSTALLED", flush=True)
+            print(f"  {display_name:<20s} NOT INSTALLED", flush=True)
     print(flush=True)
 
 
