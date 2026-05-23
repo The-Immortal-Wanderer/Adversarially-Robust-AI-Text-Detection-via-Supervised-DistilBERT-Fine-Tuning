@@ -114,8 +114,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
              "Use a persistent location for cross-session resume on Kaggle.",
     )
     parser.add_argument(
-        "--kaggle-dataset", default="The-Immortal-Wanderer/ann-project-results",
-        help="Kaggle Dataset handle for upload (default: The-Immortal-Wanderer/ann-project-results)",
+        "--kaggle-dataset", default="tetsujin007/ann-project-results",
+        help="Kaggle Dataset handle for upload (default: tetsujin007/ann-project-results)",
     )
     return parser
 
@@ -462,7 +462,10 @@ def main() -> None:
     install_deps(kaggle_mode, requirements_path)
 
     # 2b. Data setup (Kaggle only)
-    if kaggle_mode and not data_dir.exists():
+    # Always run in Kaggle mode — idempotent internally (skips existing files).
+    # The guard must not check data_dir.exists() because that directory may
+    # pre-exist from a prior session while the project_root mirror is missing.
+    if kaggle_mode:
         _setup_kaggle_data(project_root, data_dir)
 
     # 3. Load run log for resume
