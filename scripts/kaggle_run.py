@@ -115,7 +115,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--kaggle-dataset", default="tetsujin007/ann-project-results",
-        help="Kaggle Dataset handle for upload (default: tetsujin007/ann-project-results)",
+        help="Kaggle Dataset handle for results archive upload (default: tetsujin007/ann-project-results)",
+    )
+    parser.add_argument(
+        "--runlog-dataset", default=None, type=str,
+        help="Kaggle Dataset handle for persistent run_log (default: auto-derived from --kaggle-dataset, "
+             "e.g. tetsujin007/ann-project-runlog)",
     )
     return parser
 
@@ -381,29 +386,31 @@ def save_run_log(log_path: Path, run_log: dict[str, Any]) -> None:
 
 def _download_previous_run_log(
     kaggle_mode: bool,
-    dataset_handle: str,
+    runlog_dataset_handle: str,
     run_log_path: Path,
 ) -> None:
-    """Fetch the previous session's run_log.json from the uploaded Kaggle Dataset.
+    """Fetch the previous session's run_log.json from the persistent runlog Dataset.
 
-    Enables cross-session resume: downloads the latest published Dataset
-    version and copies its ``run_log.json`` so ``--resume`` can skip
-    already-completed ablations in the new session.
+    Unlike the main results Dataset (uploaded once at the very end), this
+    lightweight Dataset is updated after EACH completed ablation, so a
+    session kill at any point loses at most one ablation's worth of work.
 
-    Silent on first session (no previous version).  Failures are logged
-    but never fatal — falls back to a fresh start.
+    Silent on first session (no previous upload).  Failures are logged but
+    never fatal — falls back to a fresh start.
     """
     if not kaggle_mode:
         return
     if run_log_path.exists():
-        # Within-session resume: log already on disk from a prior run this session.
         return
 
-    print(f"[RESUME] Checking Dataset {dataset_handle} for previous run log...", flush=True)
+    print(
+        f"[RESUME] Checking runlog Dataset {runlog_dataset_handle} ...",
+        flush=True,
+    )
     try:
         import kagglehub
 
-        download_path = Path(kagglehub.dataset_download(dataset_handle))
+        download_path = Path(kagglehub.dataset_download(runlog_dataset_handle))
         prev_log = download_path / "run_log.json"
 
         if prev_log.exists():
@@ -413,17 +420,46 @@ def _download_previous_run_log(
                 json.loads(prev_log.read_text()).get("completed_ablations", {})
             )
             print(
-                f"[RESUME] Restored from Dataset {dataset_handle}"
-                f" ({n_completed} completed ablations)",
+                f"[RESUME] Restored from {runlog_dataset_handle}"
+                f" ({n_completed} completed ablations -- will skip those)",
                 flush=True,
             )
         else:
-            print("[RESUME] Dataset has no run_log.json (first session).", flush=True)
+            print("[RESUME] No run_log.json in runlog Dataset (first session).", flush=True)
     except Exception as e:
-        # First session where the Dataset has never been uploaded to, or
-        # network issue — either way we start fresh.
         print(f"[RESUME] Could not fetch previous run log: {e}", flush=True)
         print("[RESUME] Starting fresh session.", flush=True)
+
+
+def _upload_run_log(runlog_dataset_handle: str, run_log_path: Path) -> None:
+    """Upload run_log.json to the persistent runlog Kaggle Dataset.
+
+    Called after EACH completed ablation so the run log survives session
+    kills.  The upload creates a new Dataset version with just the tiny
+    JSON file (~2 KB) — fast and cheap.  ``_download_previous_run_log``
+    fetches it on the next session's startup.
+    """
+    if not run_log_path.exists():
+        return
+    print(
+        f"[RESUME] Uploading run log to {runlog_dataset_handle} ...",
+        flush=True,
+    )
+    try:
+        import kagglehub
+        import tempfile
+
+        runlog_dir = Path(tempfile.mkdtemp(prefix="ann_project_runlog_"))
+        shutil.copy2(str(run_log_path), str(runlog_dir / "run_log.json"))
+
+        kagglehub.dataset_upload(
+            handle=runlog_dataset_handle,
+            local_dataset_dir=str(runlog_dir),
+            version_notes="Run log checkpoint (auto-upload after ablation)",
+        )
+        shutil.rmtree(str(runlog_dir), ignore_errors=True)
+    except Exception as e:
+        print(f"[RESUME] Run log upload failed (non-fatal): {e}", flush=True)
 
 
 def is_ablation_completed(
@@ -512,6 +548,13 @@ def main() -> None:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     results_dir.mkdir(parents=True, exist_ok=True)
 
+    # Derive runlog dataset handle (e.g. tetsujin007/ann-project-runlog)
+    if args.runlog_dataset:
+        runlog_dataset_handle = args.runlog_dataset
+    else:
+        owner = args.kaggle_dataset.split("/")[0]
+        runlog_dataset_handle = f"{owner}/ann-project-runlog"
+
     # 2. Install deps (Kaggle only)
     requirements_path = project_root / "requirements.txt"
     install_deps(kaggle_mode, requirements_path)
@@ -523,8 +566,8 @@ def main() -> None:
     if kaggle_mode:
         _setup_kaggle_data(project_root, data_dir)
 
-    # 2c. Cross-session resume: fetch previous run_log from Kaggle Dataset
-    _download_previous_run_log(kaggle_mode, args.kaggle_dataset, run_log_path)
+    # 2c. Cross-session resume: fetch previous run_log from persistent runlog Dataset
+    _download_previous_run_log(kaggle_mode, runlog_dataset_handle, run_log_path)
 
     # 3. Load run log for resume
     run_log = load_run_log(run_log_path)
@@ -621,6 +664,7 @@ def main() -> None:
                 )
             if not args.dry_run:
                 save_run_log(run_log_path, run_log)
+                _upload_run_log(runlog_dataset_handle, run_log_path)
             session_info["ablations_run"].append({
                 "ablation": ablation_name,
                 "checkpoint": None,
@@ -629,9 +673,6 @@ def main() -> None:
             continue
 
         if not train_ok:
-            # Training exited non-zero despite a checkpoint existing
-            # (e.g. from a prior session).  Skip eval but mark completed
-            # so resume doesn't loop on a broken ablation.
             if not args.dry_run:
                 print(
                     f"[WARN] Training for {ablation_name} returned non-zero."
@@ -646,6 +687,7 @@ def main() -> None:
             )
             if not args.dry_run:
                 save_run_log(run_log_path, run_log)
+                _upload_run_log(runlog_dataset_handle, run_log_path)
             session_info["ablations_run"].append({
                 "ablation": ablation_name,
                 "checkpoint": str(checkpoint_path),
@@ -699,6 +741,7 @@ def main() -> None:
                 benchmark_ok=bool(benchmark_ok),
             )
             save_run_log(run_log_path, run_log)
+            _upload_run_log(runlog_dataset_handle, run_log_path)
 
         session_info["ablations_run"].append({
             "ablation": ablation_name,
@@ -713,6 +756,7 @@ def main() -> None:
         session_info["completed_at"] = datetime.now(timezone.utc).isoformat()
         run_log.setdefault("sessions", []).append(session_info)
         save_run_log(run_log_path, run_log)
+        _upload_run_log(runlog_dataset_handle, run_log_path)
 
     # 6. Upload outputs (Kaggle only)
     if not args.dry_run and kaggle_mode and args.upload:
