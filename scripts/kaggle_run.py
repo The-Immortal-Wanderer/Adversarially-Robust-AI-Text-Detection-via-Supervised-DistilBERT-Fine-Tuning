@@ -462,6 +462,102 @@ def _upload_run_log(runlog_dataset_handle: str, run_log_path: Path) -> None:
         print(f"[RESUME] Run log upload failed (non-fatal): {e}", flush=True)
 
 
+def _upload_results_snapshot(
+    results_dir: Path,
+    run_log_path: Path,
+    dataset_handle: str,
+) -> None:
+    """Upload eval JSONs + run_log.json to the main results Dataset.
+
+    Called after EACH ablation so the actual metrics survive session kills.
+    Each upload creates a new Dataset version containing ALL eval JSONs
+    accumulated so far (not just the latest one) plus the run_log.
+    Eval files are ~2 KB each — the upload takes ~5 s.
+    """
+    if not results_dir.exists() and not run_log_path.exists():
+        return
+    print(
+        f"[SNAPSHOT] Saving eval results to {dataset_handle} ...",
+        flush=True,
+    )
+    try:
+        import kagglehub
+        import tempfile
+
+        snap_dir = Path(tempfile.mkdtemp(prefix="ann_project_snap_"))
+
+        # Copy run_log
+        if run_log_path.exists():
+            shutil.copy2(str(run_log_path), str(snap_dir / "run_log.json"))
+
+        # Copy all eval JSONs accumulated so far
+        snap_results = snap_dir / "results"
+        if results_dir.exists():
+            snap_results.mkdir(parents=True, exist_ok=True)
+            for f in sorted(results_dir.iterdir()):
+                if f.suffix == ".json":
+                    shutil.copy2(str(f), str(snap_results / f.name))
+
+        kagglehub.dataset_upload(
+            handle=dataset_handle,
+            local_dataset_dir=str(snap_dir),
+            version_notes="Eval results snapshot (per-ablation)",
+        )
+        shutil.rmtree(str(snap_dir), ignore_errors=True)
+        print("[SNAPSHOT] Upload complete.", flush=True)
+    except Exception as e:
+        print(f"[SNAPSHOT] Upload failed (non-fatal): {e}", flush=True)
+
+
+def _restore_results_snapshot(
+    kaggle_mode: bool,
+    dataset_handle: str,
+    results_dir: Path,
+    run_log_path: Path,
+) -> None:
+    """Download the latest eval JSONs + run_log from the results Dataset.
+
+    Runs at startup so previously completed ablations' metrics are
+    available locally — even if the checkpoints are gone.
+    """
+    if not kaggle_mode:
+        return
+    if results_dir.exists() and any(results_dir.iterdir()):
+        # Results already present (within-session resume)
+        return
+    print(
+        f"[SNAPSHOT] Checking {dataset_handle} for previous results ...",
+        flush=True,
+    )
+    try:
+        import kagglehub
+
+        download_path = Path(kagglehub.dataset_download(dataset_handle))
+
+        # Restore eval JSONs
+        dl_results = download_path / "results"
+        if dl_results.exists():
+            results_dir.mkdir(parents=True, exist_ok=True)
+            restored = 0
+            for f in sorted(dl_results.iterdir()):
+                if f.suffix == ".json" and not f.name.startswith("."):
+                    dst = results_dir / f.name
+                    shutil.copy2(str(f), str(dst))
+                    restored += 1
+            if restored > 0:
+                print(f"[SNAPSHOT] Restored {restored} eval JSONs from Dataset", flush=True)
+
+        # Restore run_log from results Dataset (backup source)
+        dl_runlog = download_path / "run_log.json"
+        if dl_runlog.exists() and not run_log_path.exists():
+            run_log_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(dl_runlog), str(run_log_path))
+            print("[SNAPSHOT] Restored run_log.json from results Dataset", flush=True)
+
+    except Exception as e:
+        print(f"[SNAPSHOT] Could not restore previous results: {e}", flush=True)
+
+
 def is_ablation_completed(
     run_log: dict[str, Any], dataset: str, ablation: str,
     epochs: int, batch_size: int, seed: int,
@@ -569,6 +665,9 @@ def main() -> None:
     # 2c. Cross-session resume: fetch previous run_log from persistent runlog Dataset
     _download_previous_run_log(kaggle_mode, runlog_dataset_handle, run_log_path)
 
+    # 2d. Restore previous eval results from results Dataset
+    _restore_results_snapshot(kaggle_mode, args.kaggle_dataset, results_dir, run_log_path)
+
     # 3. Load run log for resume
     run_log = load_run_log(run_log_path)
     current_session_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -665,6 +764,7 @@ def main() -> None:
             if not args.dry_run:
                 save_run_log(run_log_path, run_log)
                 _upload_run_log(runlog_dataset_handle, run_log_path)
+                _upload_results_snapshot(results_dir, run_log_path, args.kaggle_dataset)
             session_info["ablations_run"].append({
                 "ablation": ablation_name,
                 "checkpoint": None,
@@ -688,6 +788,7 @@ def main() -> None:
             if not args.dry_run:
                 save_run_log(run_log_path, run_log)
                 _upload_run_log(runlog_dataset_handle, run_log_path)
+                _upload_results_snapshot(results_dir, run_log_path, args.kaggle_dataset)
             session_info["ablations_run"].append({
                 "ablation": ablation_name,
                 "checkpoint": str(checkpoint_path),
@@ -742,6 +843,7 @@ def main() -> None:
             )
             save_run_log(run_log_path, run_log)
             _upload_run_log(runlog_dataset_handle, run_log_path)
+            _upload_results_snapshot(results_dir, run_log_path, args.kaggle_dataset)
 
         session_info["ablations_run"].append({
             "ablation": ablation_name,
@@ -757,6 +859,7 @@ def main() -> None:
         run_log.setdefault("sessions", []).append(session_info)
         save_run_log(run_log_path, run_log)
         _upload_run_log(runlog_dataset_handle, run_log_path)
+        _upload_results_snapshot(results_dir, run_log_path, args.kaggle_dataset)
 
     # 6. Upload outputs (Kaggle only)
     if not args.dry_run and kaggle_mode and args.upload:
