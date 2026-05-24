@@ -105,8 +105,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Disable kagglehub upload",
     )
     parser.add_argument(
-        "--seed", default=42, type=int,
-        help="Random seed for training (default: 42). Passed through to train.py as --training.seed.",
+        "--seeds", default=[42], type=int, nargs="+",
+        help="Random seed(s) for training (default: 42). Pass --seeds 42 99 for multi-seed runs. "
+             "Each seed runs the full ablation pipeline in serial.",
     )
     parser.add_argument(
         "--run-log-path", default=None, type=str,
@@ -445,6 +446,7 @@ def _upload_run_log(runlog_dataset_handle: str, run_log_path: Path) -> None:
         f"[RESUME] Uploading run log to {runlog_dataset_handle} ...",
         flush=True,
     )
+    runlog_dir: Path | None = None
     try:
         import kagglehub
         import tempfile
@@ -457,12 +459,15 @@ def _upload_run_log(runlog_dataset_handle: str, run_log_path: Path) -> None:
             local_dataset_dir=str(runlog_dir),
             version_notes="Run log checkpoint (auto-upload after ablation)",
         )
-        shutil.rmtree(str(runlog_dir), ignore_errors=True)
     except Exception as e:
         print(f"[RESUME] Run log upload failed (non-fatal): {e}", flush=True)
+    finally:
+        if runlog_dir is not None:
+            shutil.rmtree(str(runlog_dir), ignore_errors=True)
 
 
 def _upload_results_snapshot(
+    kaggle_mode: bool,
     results_dir: Path,
     run_log_path: Path,
     dataset_handle: str,
@@ -473,13 +478,18 @@ def _upload_results_snapshot(
     Each upload creates a new Dataset version containing ALL eval JSONs
     accumulated so far (not just the latest one) plus the run_log.
     Eval files are ~2 KB each — the upload takes ~5 s.
+
+    Silently no-ops when ``kaggle_mode`` is False (local execution).
     """
+    if not kaggle_mode:
+        return
     if not results_dir.exists() and not run_log_path.exists():
         return
     print(
         f"[SNAPSHOT] Saving eval results to {dataset_handle} ...",
         flush=True,
     )
+    snap_dir: Path | None = None
     try:
         import kagglehub
         import tempfile
@@ -503,10 +513,12 @@ def _upload_results_snapshot(
             local_dataset_dir=str(snap_dir),
             version_notes="Eval results snapshot (per-ablation)",
         )
-        shutil.rmtree(str(snap_dir), ignore_errors=True)
         print("[SNAPSHOT] Upload complete.", flush=True)
     except Exception as e:
         print(f"[SNAPSHOT] Upload failed (non-fatal): {e}", flush=True)
+    finally:
+        if snap_dir is not None:
+            shutil.rmtree(str(snap_dir), ignore_errors=True)
 
 
 def _restore_results_snapshot(
@@ -564,11 +576,12 @@ def is_ablation_completed(
 ) -> bool:
     """Check whether an ablation was already completed with matching params.
 
-    Compares *epochs*, *batch_size*, and *seed* so that changing any of
-    them triggers a re-run.
+    The run-log key includes the seed so that each seed+ablation combination
+    is tracked independently.  Compares *epochs*, *batch_size*, and *seed*
+    so that changing any of them triggers a re-run.
     """
     completed: dict = dict(run_log.get("completed_ablations") or {})
-    entry = completed.get(f"{dataset}_{ablation}")
+    entry = completed.get(f"{dataset}_{ablation}_seed{seed}")
     if entry is None:
         return False
     return (
@@ -590,9 +603,13 @@ def mark_ablation_completed(
     eval_output: str | None,
     benchmark_ok: bool,
 ) -> None:
-    """Record an ablation as completed in the run log."""
+    """Record an ablation as completed in the run log.
+
+    The key includes the seed so that multi-seed runs are tracked
+    independently per seed+ablation combination.
+    """
     run_log.setdefault("completed_ablations", {})
-    key = f"{dataset}_{ablation}"
+    key = f"{dataset}_{ablation}_seed{seed}"
     run_log["completed_ablations"][key] = {
         "dataset": dataset,
         "ablation": ablation,
@@ -627,8 +644,11 @@ def main() -> None:
     if args.upload is None:
         args.upload = kaggle_mode
 
-    if args.seed != 42:
-        print(f"[CONFIG] Overriding seed: {args.seed}", flush=True)
+    if args.seeds != [42]:
+        if len(args.seeds) == 1:
+            print(f"[CONFIG] Overriding seed: {args.seeds[0]}", flush=True)
+        else:
+            print(f"[CONFIG] Multi-seed run: seeds={args.seeds}", flush=True)
 
     dataset = args.dataset
     ablation_names = [args.ablation] if args.ablation else list(_DEFAULT_ABLATIONS)
@@ -685,173 +705,180 @@ def main() -> None:
     }
 
     # 4. Pipeline loop (train -> evaluate -> benchmark per ablation)
+    seeds = args.seeds
     print(f"\n{'=' * 60}", flush=True)
     print(
         f"PIPELINE : {len(ablation_names)} ablation(s)  |"
         f"  epochs={args.epochs}  batch_size={args.batch_size}  dataset={dataset}",
         flush=True,
     )
+    print(f"  SEEDS   : {len(seeds)} seed(s)  |  {seeds}", flush=True)
     if args.dry_run:
         print("DRY RUN  : no commands will execute", flush=True)
     else:
         print("EXECUTING : serialised pipeline", flush=True)
     print(f"{'=' * 60}", flush=True)
 
-    for ablation_name in ablation_names:
-        print(f"\n{'#' * 60}", flush=True)
-        print(f"# ABLATION : {ablation_name}", flush=True)
-        print(f"{'#' * 60}", flush=True)
+    for current_seed in seeds:
+        print(f"\n{'~' * 60}", flush=True)
+        print(f"SEED={current_seed}  (starting seed loop iteration)", flush=True)
+        print(f"{'~' * 60}", flush=True)
 
-        # Resume check
-        if args.resume and is_ablation_completed(
-            run_log, dataset, ablation_name,
-            args.epochs, args.batch_size, args.seed,
-        ):
-            print(
-                f"[RESUME] {dataset}_{ablation_name} already completed"
-                f" (epochs={args.epochs}, batch={args.batch_size}, seed={args.seed}). Skipping.",
-                flush=True,
-            )
-            continue
+        for ablation_name in ablation_names:
+            print(f"\n{'#' * 60}", flush=True)
+            print(f"# ABLATION : {ablation_name}", flush=True)
+            print(f"{'#' * 60}", flush=True)
 
-        # Defensive timer
-        if not check_time_remaining(f"train/{ablation_name}"):
-            session_info["incomplete"] = True
-            break
-
-        # Build config overrides for train.py
-        train_config_args = [
-            f"--training.epochs={args.epochs}",
-            f"--training.batch_size={args.batch_size}",
-            f"--training.seed={args.seed}",
-        ]
-
-        # Train
-        train_cmd = [
-            sys.executable, "-u", "scripts/train.py",
-            "--dataset", dataset,
-            "--ablation", ablation_name,
-            *train_config_args,
-        ]
-
-        train_ok = False
-        training_time = 0.0
-        if args.dry_run:
-            print(f"[DRY-RUN] train cmd:       {' '.join(train_cmd)}", flush=True)
-            train_ok = True
-        else:
-            t0 = time.monotonic()
-            rc = run_pipeline_step(f"train/{ablation_name}", train_cmd, cwd=project_root)
-            training_time = time.monotonic() - t0
-            train_ok = rc == 0
-
-        # Locate the resulting checkpoint
-        checkpoint_path: Path | None = (
-            artifact_dir / f"{dataset}_{ablation_name}_best.pt"
-            if args.dry_run
-            else find_checkpoint(artifact_dir, dataset, ablation_name)
-        )
-
-        if checkpoint_path is None:
-            # No checkpoint -- nothing to salvage.  Do NOT mark completed so
-            # that --resume will re-attempt this ablation from scratch.
-            if not args.dry_run:
+            # Resume check
+            if args.resume and is_ablation_completed(
+                run_log, dataset, ablation_name,
+                args.epochs, args.batch_size, current_seed,
+            ):
                 print(
-                    f"[WARN] No checkpoint for {ablation_name} after training."
-                    " Not marking completed -- will retry on next --resume run.",
+                    f"[RESUME] {dataset}_{ablation_name} already completed"
+                    f" (epochs={args.epochs}, batch={args.batch_size}, seed={current_seed}). Skipping.",
                     flush=True,
                 )
-            if not args.dry_run:
-                save_run_log(run_log_path, run_log)
-                _upload_run_log(runlog_dataset_handle, run_log_path)
-                _upload_results_snapshot(results_dir, run_log_path, args.kaggle_dataset)
-            session_info["ablations_run"].append({
-                "ablation": ablation_name,
-                "checkpoint": None,
-                "training_ok": train_ok, "eval_ok": False, "benchmark_ok": False,
-            })
-            continue
+                continue
 
-        if not train_ok:
-            if not args.dry_run:
-                print(
-                    f"[WARN] Training for {ablation_name} returned non-zero."
-                    " Skipping eval and benchmark.", flush=True,
-                )
-            mark_ablation_completed(
-                run_log, dataset, ablation_name,
-                args.epochs, args.batch_size, args.seed,
-                checkpoint=str(checkpoint_path),
-                training_time=training_time,
-                eval_output=None, benchmark_ok=False,
+            # Defensive timer
+            if not check_time_remaining(f"train/{ablation_name}"):
+                session_info["incomplete"] = True
+                break
+
+            # Build config overrides for train.py
+            train_config_args = [
+                f"--training.epochs={args.epochs}",
+                f"--training.batch_size={args.batch_size}",
+                f"--training.seed={current_seed}",
+            ]
+
+            # Train
+            train_cmd = [
+                sys.executable, "-u", "scripts/train.py",
+                "--dataset", dataset,
+                "--ablation", ablation_name,
+                *train_config_args,
+            ]
+
+            train_ok = False
+            training_time = 0.0
+            if args.dry_run:
+                print(f"[DRY-RUN] train cmd:       {' '.join(train_cmd)}", flush=True)
+                train_ok = True
+            else:
+                t0 = time.monotonic()
+                rc = run_pipeline_step(f"train/{ablation_name}", train_cmd, cwd=project_root)
+                training_time = time.monotonic() - t0
+                train_ok = rc == 0
+
+            # Locate the resulting checkpoint
+            checkpoint_path: Path | None = (
+                artifact_dir / f"{dataset}_{ablation_name}_best.pt"
+                if args.dry_run
+                else find_checkpoint(artifact_dir, dataset, ablation_name)
             )
+
+            if checkpoint_path is None:
+                # No checkpoint -- nothing to salvage.  Do NOT mark completed so
+                # that --resume will re-attempt this ablation from scratch.
+                if not args.dry_run:
+                    print(
+                        f"[WARN] No checkpoint for {ablation_name} after training."
+                        " Not marking completed -- will retry on next --resume run.",
+                        flush=True,
+                    )
+                if not args.dry_run:
+                    save_run_log(run_log_path, run_log)
+                    _upload_run_log(runlog_dataset_handle, run_log_path)
+                    _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset)
+                session_info["ablations_run"].append({
+                    "ablation": ablation_name,
+                    "checkpoint": None,
+                    "training_ok": train_ok, "eval_ok": False, "benchmark_ok": False,
+                })
+                continue
+
+            if not train_ok:
+                if not args.dry_run:
+                    print(
+                        f"[WARN] Training for {ablation_name} returned non-zero."
+                        " Skipping eval and benchmark.", flush=True,
+                    )
+                mark_ablation_completed(
+                    run_log, dataset, ablation_name,
+                    args.epochs, args.batch_size, current_seed,
+                    checkpoint=str(checkpoint_path),
+                    training_time=training_time,
+                    eval_output=None, benchmark_ok=False,
+                )
+                if not args.dry_run:
+                    save_run_log(run_log_path, run_log)
+                    _upload_run_log(runlog_dataset_handle, run_log_path)
+                    _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset)
+                session_info["ablations_run"].append({
+                    "ablation": ablation_name,
+                    "checkpoint": str(checkpoint_path),
+                    "training_ok": False, "eval_ok": False, "benchmark_ok": False,
+                })
+                continue
+
+            # Evaluate
+            eval_output_path = results_dir / f"{dataset}_{ablation_name}_seed{current_seed}_eval.json"
+            eval_cmd = [
+                sys.executable, "-u", "scripts/evaluate.py",
+                "--dataset", dataset,
+                "--checkpoint", str(checkpoint_path.resolve()),
+                "--output", str(eval_output_path.resolve()),
+            ]
+
+            eval_ok = False
+            if args.dry_run:
+                print(f"[DRY-RUN] eval cmd:       {' '.join(eval_cmd)}", flush=True)
+                eval_ok = True
+            else:
+                rc = run_pipeline_step(f"eval/{ablation_name}", eval_cmd, cwd=project_root)
+                eval_ok = rc == 0
+
+            # Benchmark (only for ablation_b -- benchmark.py is hardcoded)
+            benchmark_ok: bool | None = None
+            if ablation_name == "ablation_b":
+                benchmark_cmd = [sys.executable, "-u", "scripts/benchmark.py"]
+                if args.dry_run:
+                    print(f"[DRY-RUN] benchmark cmd: {' '.join(benchmark_cmd)}", flush=True)
+                    benchmark_ok = True
+                else:
+                    rc = run_pipeline_step(f"benchmark/{ablation_name}", benchmark_cmd, cwd=project_root)
+                    benchmark_ok = rc == 0
+            else:
+                msg = f"[BENCH] benchmark.py is hardcoded to ablation_b; skipping for {ablation_name}"
+                if args.dry_run:
+                    print(f"[DRY-RUN] {msg}", flush=True)
+                else:
+                    print(msg, flush=True)
+                benchmark_ok = False
+
+            # Persist run log
             if not args.dry_run:
+                mark_ablation_completed(
+                    run_log, dataset, ablation_name,
+                    args.epochs, args.batch_size, current_seed,
+                    checkpoint=str(checkpoint_path),
+                    training_time=training_time,
+                    eval_output=str(eval_output_path) if eval_ok else None,
+                    benchmark_ok=bool(benchmark_ok),
+                )
                 save_run_log(run_log_path, run_log)
                 _upload_run_log(runlog_dataset_handle, run_log_path)
-                _upload_results_snapshot(results_dir, run_log_path, args.kaggle_dataset)
+                _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset)
+
             session_info["ablations_run"].append({
                 "ablation": ablation_name,
                 "checkpoint": str(checkpoint_path),
-                "training_ok": False, "eval_ok": False, "benchmark_ok": False,
+                "training_ok": train_ok,
+                "eval_ok": eval_ok,
+                "benchmark_ok": benchmark_ok,
             })
-            continue
-
-        # Evaluate
-        eval_output_path = results_dir / f"{dataset}_{ablation_name}_eval.json"
-        eval_cmd = [
-            sys.executable, "-u", "scripts/evaluate.py",
-            "--dataset", dataset,
-            "--checkpoint", str(checkpoint_path.resolve()),
-            "--output", str(eval_output_path.resolve()),
-        ]
-
-        eval_ok = False
-        if args.dry_run:
-            print(f"[DRY-RUN] eval cmd:       {' '.join(eval_cmd)}", flush=True)
-            eval_ok = True
-        else:
-            rc = run_pipeline_step(f"eval/{ablation_name}", eval_cmd, cwd=project_root)
-            eval_ok = rc == 0
-
-        # Benchmark (only for ablation_b -- benchmark.py is hardcoded)
-        benchmark_ok: bool | None = None
-        if ablation_name == "ablation_b":
-            benchmark_cmd = [sys.executable, "-u", "scripts/benchmark.py"]
-            if args.dry_run:
-                print(f"[DRY-RUN] benchmark cmd: {' '.join(benchmark_cmd)}", flush=True)
-                benchmark_ok = True
-            else:
-                rc = run_pipeline_step(f"benchmark/{ablation_name}", benchmark_cmd, cwd=project_root)
-                benchmark_ok = rc == 0
-        else:
-            msg = f"[BENCH] benchmark.py is hardcoded to ablation_b; skipping for {ablation_name}"
-            if args.dry_run:
-                print(f"[DRY-RUN] {msg}", flush=True)
-            else:
-                print(msg, flush=True)
-            benchmark_ok = False
-
-        # Persist run log
-        if not args.dry_run:
-            mark_ablation_completed(
-                run_log, dataset, ablation_name,
-                args.epochs, args.batch_size, args.seed,
-                checkpoint=str(checkpoint_path),
-                training_time=training_time,
-                eval_output=str(eval_output_path) if eval_ok else None,
-                benchmark_ok=bool(benchmark_ok),
-            )
-            save_run_log(run_log_path, run_log)
-            _upload_run_log(runlog_dataset_handle, run_log_path)
-            _upload_results_snapshot(results_dir, run_log_path, args.kaggle_dataset)
-
-        session_info["ablations_run"].append({
-            "ablation": ablation_name,
-            "checkpoint": str(checkpoint_path),
-            "training_ok": train_ok,
-            "eval_ok": eval_ok,
-            "benchmark_ok": benchmark_ok,
-        })
 
     # 5. Save final run log
     if not args.dry_run:
@@ -859,11 +886,11 @@ def main() -> None:
         run_log.setdefault("sessions", []).append(session_info)
         save_run_log(run_log_path, run_log)
         _upload_run_log(runlog_dataset_handle, run_log_path)
-        _upload_results_snapshot(results_dir, run_log_path, args.kaggle_dataset)
+        _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset)
 
     # 6. Upload outputs (Kaggle only)
     if not args.dry_run and kaggle_mode and args.upload:
-        upload_outputs(output_dir, args.kaggle_dataset)
+        upload_outputs(output_dir, args.kaggle_dataset, artifact_dir, results_dir)
 
     # 7. Final summary
     _print_final_summary(session_info, args.dry_run)
@@ -919,7 +946,12 @@ def _setup_kaggle_data(project_root: Path, data_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def upload_outputs(output_dir: Path, dataset_handle: str) -> None:
+def upload_outputs(
+    output_dir: Path,
+    dataset_handle: str,
+    artifact_dir: Path,
+    results_dir: Path,
+) -> None:
     """Upload results/ + artifacts/ + run_log.json to Kaggle Dataset via kagglehub.
 
     Creates a temp directory with copies of all outputs, then calls
@@ -928,8 +960,6 @@ def upload_outputs(output_dir: Path, dataset_handle: str) -> None:
 
     Falls back gracefully if ``kagglehub`` is not installed or the upload fails.
     """
-    results_dir = output_dir / "results"
-    artifact_dir = output_dir / "artifacts"
     run_log = output_dir / "run_log.json"
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -960,6 +990,7 @@ def upload_outputs(output_dir: Path, dataset_handle: str) -> None:
 
     # ── Upload via kagglehub (uses a temp directory, not the archive path) ──
     print("[UPLOAD] Attempting kagglehub upload ...", flush=True)
+    temp_upload_dir: Path | None = None
     try:
         import kagglehub  # type: ignore[import-untyped]
         import tempfile
@@ -988,9 +1019,6 @@ def upload_outputs(output_dir: Path, dataset_handle: str) -> None:
         )
         print("[UPLOAD] Upload complete.", flush=True)
 
-        # Clean up temp directory
-        shutil.rmtree(str(temp_upload_dir), ignore_errors=True)
-
     except ImportError:
         print(
             "[UPLOAD] kagglehub not installed. To enable automatic upload:\n"
@@ -1000,6 +1028,9 @@ def upload_outputs(output_dir: Path, dataset_handle: str) -> None:
     except Exception as e:
         print(f"[UPLOAD] kagglehub upload failed: {e}", flush=True)
         print(f"[UPLOAD] Archive saved at: {archive_path}", flush=True)
+    finally:
+        if temp_upload_dir is not None:
+            shutil.rmtree(str(temp_upload_dir), ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
