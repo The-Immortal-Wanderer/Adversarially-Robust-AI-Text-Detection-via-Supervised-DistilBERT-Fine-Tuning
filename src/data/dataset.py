@@ -1,5 +1,5 @@
 """
-DetectRL Dataset class for tokenization and on-the-fly processing.
+RAID Dataset class for tokenization and on-the-fly processing.
 """
 
 from __future__ import annotations
@@ -11,16 +11,16 @@ from torch.utils.data import Dataset
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 
-class DetectRLDataset(Dataset):
+class RAIDDataset(Dataset):
     """
-    PyTorch Dataset for DetectRL that tokenizes examples on-the-fly.
-    
+    PyTorch Dataset for RAID that tokenizes examples on-the-fly.
+
     Args:
         dataset: HuggingFace Dataset object with 'text' and 'label' columns
         tokenizer: DistilBertTokenizer for tokenization
         max_length: Maximum sequence length (default: 512)
     """
-    
+
     def __init__(
         self,
         dataset: object,
@@ -31,27 +31,27 @@ class DetectRLDataset(Dataset):
         self.dataset = dataset
         self.tokenizer = tokenizer
         self.max_length = max_length
-        
+
         # Ensure dataset has required columns
         if hasattr(dataset, "column_names"):
             columns = dataset.column_names
         else:
             # Pandas DataFrame
             columns = dataset.columns.tolist()
-        
+
         if "text" not in columns:
             raise ValueError(f"Dataset must have 'text' column. Found: {columns}")
         if "label" not in columns:
             raise ValueError(f"Dataset must have 'label' column. Found: {columns}")
-    
+
     def __len__(self) -> int:
         """Return dataset size."""
         return len(self.dataset)
-    
+
     def __getitem__(self, idx: int) -> dict:
         """
         Get tokenized example.
-        
+
         Returns:
             dict with keys: input_ids, attention_mask, labels (all as tensors)
         """
@@ -60,14 +60,14 @@ class DetectRLDataset(Dataset):
             example = self.dataset.iloc[idx].to_dict()
         else:
             example = self.dataset[idx]
-        
+
         text = example["text"]
         label = example["label"]
-        
+
         # Ensure text is string
-        if not isinstance(text, str):
-            text = str(text)
-        
+        if text is None or not isinstance(text, str):
+            raise ValueError(f"Invalid text at index {idx}: {type(text).__name__}")
+
         # Tokenize
         encoding = self.tokenizer(
             text,
@@ -76,12 +76,12 @@ class DetectRLDataset(Dataset):
             truncation=True,
             return_tensors="pt",
         )
-        
+
         # Extract and squeeze (remove batch dimension added by return_tensors="pt")
         return {
             "input_ids": encoding["input_ids"].squeeze(0),
             "attention_mask": encoding["attention_mask"].squeeze(0),
-            "labels": torch.tensor(label, dtype=torch.long),
+            "labels": torch.tensor(int(label), dtype=torch.long),
         }
 
 
@@ -117,9 +117,14 @@ class OnTheFlyDataset(Dataset):
         return len(self.labels)
 
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+        text = self.texts[idx]
+        if text is None or not isinstance(text, str):
+            raise ValueError(
+                f"OnTheFlyDataset[{idx}]: expected str, got {type(text).__name__}"
+            )
         tokenizer = self._get_tokenizer()
         enc = tokenizer(
-            self.texts[idx],
+            text,
             max_length=self.max_length,
             padding="max_length",
             truncation=True,

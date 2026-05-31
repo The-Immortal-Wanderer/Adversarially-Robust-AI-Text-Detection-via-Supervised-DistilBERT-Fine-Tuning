@@ -32,7 +32,9 @@ except ImportError as exc:
 ROOT_DIR = Path(__file__).resolve().parents[3]  # from src/data/processing/ → project root
 RAW_DIR = ROOT_DIR / "data" / "raw" / "raid"
 PROCESSED_DIR = ROOT_DIR / "data" / "processed"
-RANDOM_SEED = 42
+
+_PARQUET_READ_BATCH_SIZE: int = 50_000  # H-009: named constant for sequential parquet batching
+RANDOM_SEED: int = 42  # Seed for reproducible sampling in build pools
 
 SEEN_GENERATORS: set[str] = {
     "mpt",            # mpt and mpt-chat (open source)
@@ -80,7 +82,7 @@ def _load_raw_parquet(path: Path) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     total_rows = 0
 
-    for batch_index, batch in enumerate(parquet_file.iter_batches(batch_size=50_000), start=1):
+    for batch in parquet_file.iter_batches(batch_size=_PARQUET_READ_BATCH_SIZE):
         batch_df = batch.to_pandas()
         total_rows += len(batch_df)
 
@@ -106,7 +108,7 @@ def _load_raw_parquet(path: Path) -> pd.DataFrame:
 
             # AI row — match against known generators
             generator_key = None
-            for generator_name in SEEN_GENERATORS | UNSEEN_GENERATORS:
+            for generator_name in sorted(SEEN_GENERATORS | UNSEEN_GENERATORS, key=len, reverse=True):
                 if generator_name in model_name:
                     generator_key = generator_name
                     break
@@ -145,6 +147,11 @@ def _build_train_pool(df: pd.DataFrame) -> pd.DataFrame:
     n_human = min(TARGET_TRAIN_PER_CLASS, len(human_df))
     n_ai = min(TARGET_TRAIN_PER_CLASS, len(seen_ai_df))
     n = min(n_human, n_ai)
+    if n < 1:
+        raise ValueError(
+            f"_build_train_pool: capped to 0 samples "
+            f"(human={n_human}, ai={n_ai})"
+        )
 
     human_sample = human_df.sample(n=n, random_state=RANDOM_SEED)
     ai_sample = seen_ai_df.sample(n=n, random_state=RANDOM_SEED)
@@ -174,6 +181,11 @@ def _build_unseen_pool(df: pd.DataFrame) -> pd.DataFrame:
     n_ai = min(TARGET_UNSEEN_PER_CLASS, len(unseen_ai_df))
     n_human = min(TARGET_UNSEEN_PER_CLASS, len(all_human))
     n = min(n_human, n_ai)
+    if n < 1:
+        raise ValueError(
+            f"_build_unseen_pool: capped to 0 samples "
+            f"(human={n_human}, ai={n_ai})"
+        )
 
     ai_sample = unseen_ai_df.sample(n=n, random_state=RANDOM_SEED)
     human_sample = all_human.sample(n=n, random_state=RANDOM_SEED + 1)
