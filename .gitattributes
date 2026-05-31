@@ -1,4 +1,3 @@
-# Auto-normalize line endings — convert CRLF → LF on commit
 * text=auto
 
 # Python source: always LF
@@ -10,6 +9,21 @@
 
 # Documentation
 *.md   text eol=lf
+
+# LaTeX manuscript
+*.tex  text eol=lf
+
+# Config and metadata
+*.toml text eol=lf
+*.txt  text eol=lf
+*.json text eol=lf
+*.csv  text eol=lf
+*.html text eol=lf diff=html
+
+# Meta-files
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+LICENSE        text eol=lf
 
 # Batch files: keep CRLF
 *.bat  text eol=crlf
