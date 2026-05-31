@@ -4,7 +4,7 @@ scripts/train.py — Unified config-driven training entry point.
 Usage
 -----
     python -m scripts.train --dataset raid
-    python -m scripts.train --dataset detectrl --ablation ablation_b
+    python -m scripts.train --dataset raid --ablation ablation_b
 
 Replaces the 3 legacy training scripts with a single config-driven entry
 point.  All model / data / training logic lives in ``src/``.
@@ -14,20 +14,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import torch
-from transformers import AutoTokenizer
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+ROOT_DIR = Path(__file__).resolve().parent.parent  # Project root for reference only; src/ importable via pip install -e .
 
-from src.config.config import load_config
+
+from src.config import load_config
 from src.data.dataloader import (
     _prepare_dataloaders_cached,
     _prepare_dataloaders_on_the_fly,
@@ -47,11 +44,7 @@ from src.training.trainer import (
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Unified DistilBERT training entry point.")
-    parser.add_argument(
-        "--dataset",
-        choices=["raid", "detectrl"],
-        default="raid",
-        help="Dataset to train on (default: raid)",
+    parser.add_argument("--dataset", default="raid",
     )
     parser.add_argument(
         "--ablation",
@@ -65,7 +58,7 @@ def main() -> None:
     dataset_name = args.dataset
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     artifact_dir = Path(cfg.paths.artifact_dir)
-    processed_dir = ROOT_DIR / "data" / "processed"
+    processed_dir = Path(cfg.data.processed_dir) if cfg.data.processed_dir else ROOT_DIR / "data" / "processed"
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
     seed_everything(cfg.training.seed)
@@ -78,9 +71,12 @@ def main() -> None:
     print(f"Device         : {device}", flush=True)
     print(f"Dataset        : {dataset_name}", flush=True)
 
-    ablations = [args.ablation] if args.ablation else ["baseline1", "ablation_a", "ablation_b", "ablation_c"]
+    VALID_ABLATIONS = frozenset({"baseline1", "ablation_a", "ablation_b", "ablation_c"})
+    ablations = [args.ablation] if args.ablation else sorted(VALID_ABLATIONS)
 
     for name in ablations:
+        if name not in VALID_ABLATIONS:
+            raise ValueError(f"Unknown ablation '{name}'. Valid options: {sorted(VALID_ABLATIONS)}")
         ablation_cfg = getattr(cfg.ablations, name)
         cfg_m = {"head_type": ablation_cfg.head_type, "freeze_layers": ablation_cfg.freeze_layers}
         m = DistilBertClassifier(**cfg_m)
@@ -89,7 +85,7 @@ def main() -> None:
         print(f"{name:12s} -> {cfg_m} | trainable={trainable:,} / total={total:,}", flush=True)
         del m
 
-    tokenization_mode = cfg.data.tokenization_mode if hasattr(cfg.data, "tokenization_mode") else "on_the_fly"
+    tokenization_mode = cfg.data.tokenization_mode
     if tokenization_mode == "cached":
         train_loader, val_loader, test_loader, unseen_loader = _prepare_dataloaders_cached(
             dataset_name,
@@ -117,7 +113,10 @@ def main() -> None:
             unseen_cap=cfg.data.unseen_cap,
         )
 
-    print(f"\ntrain_loader : {len(train_loader)} batches", flush=True)
+    for name, loader in [("train", train_loader), ("val", val_loader), ("test", test_loader), ("unseen", unseen_loader)]:
+        if len(loader) == 0:
+            raise ValueError(f"{name}_loader has 0 batches — dataset is empty after dedup/cap. Check data pipeline.")
+    print(f"train_loader : {len(train_loader)} batches", flush=True)
     print(f"val_loader   : {len(val_loader)} batches", flush=True)
     print(f"test_loader  : {len(test_loader)} batches", flush=True)
     print(f"unseen_loader: {len(unseen_loader)} batches", flush=True)
@@ -150,6 +149,7 @@ def main() -> None:
             lr=cfg.training.lr,
             weight_decay=cfg.training.weight_decay,
             grad_clip_norm=cfg.training.grad_clip_norm,
+            use_amp=cfg.training.use_amp,
         )
         elapsed = round(time.perf_counter() - t_start, 2)
         training_times[ablation_name] = elapsed
@@ -185,7 +185,7 @@ def main() -> None:
     best_name = summary_df.sort_values("best_val_f1", ascending=False).iloc[0]["ablation_name"]
 
     for name, result in results.items():
-        ckpt_path = artifact_dir / f"{dataset_name}_{name}_best.pt"
+        ckpt_path = artifact_dir / f"{dataset_name}_{name}_seed{cfg.training.seed}_best.pt"
         torch.save(result, ckpt_path)
         print(f"Saved: {ckpt_path}", flush=True)
 
@@ -200,9 +200,6 @@ def main() -> None:
             f,
             indent=2,
         )
-
-    tokenizer_save = AutoTokenizer.from_pretrained("distilbert-base-uncased")
-    tokenizer_save.save_pretrained(artifact_dir / dataset_name)
 
     summary_csv = artifact_dir / f"{dataset_name}_summary.csv"
     summary_df.to_csv(summary_csv, index=False)

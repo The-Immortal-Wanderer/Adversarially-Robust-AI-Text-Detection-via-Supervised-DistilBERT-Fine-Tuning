@@ -51,8 +51,41 @@ from typing import Any
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_ABLATIONS = ["baseline1", "ablation_a", "ablation_b", "ablation_c"]
 
-# Defensive timer: 8.5 h (leaving 3.5 h buffer for Kaggle's 12 h session limit)
-_DEFENSIVE_LIMIT_SECONDS = 8.5 * 3600
+# ── Retry helper for uploads (transient failures on Kaggle) ─────────
+# Kaggle Dataset version-creation has undocumented rate limits and can
+# fail transiently.  Simple exponential backoff mitigates this.
+
+
+def _with_retry(fn, label: str = "operation", max_retries: int = 2, base_delay: float = 5.0) -> bool:
+    """Call *fn* with retries and exponential backoff.  Returns True if *fn* succeeded."""
+    for attempt in range(max_retries + 1):
+        try:
+            fn()
+            return True
+        except Exception as e:
+            if attempt < max_retries:
+                delay = base_delay * (2 ** attempt)
+                print(f"[RETRY] {label} failed ({e}). Retrying in {delay:.0f}s...", flush=True)
+                time.sleep(delay)
+            else:
+                print(f"[RETRY] {label} failed after {max_retries + 1} attempts: {e}", flush=True)
+    return False
+
+
+# ── Three-level defensive timer (Kaggle session watchdog) ──────────
+# Kaggle kills GPU sessions at ~9h (hard SIGKILL, variable ±15 min).
+# Three-level cascade to prevent mid-upload corruption:
+#
+#   8.0 h  (COMPUTE_DEADLINE)  — Stop launching new ablation runs.
+#                                Finish current run and save. Uploads still allowed.
+#   8.25 h (UPLOAD_DEADLINE)   — Stop any mid-upload. Save what's uploaded.
+#                                Flag partial results in run_log.json.
+#   8.5 h  (HARD_ABORT)        — sys.exit(1) as last resort.
+#                                Prevents Kaggle SIGKILL from corrupting in-progress uploads.
+#
+_COMPUTE_DEADLINE_SECONDS = 8.0 * 3600
+_UPLOAD_DEADLINE_SECONDS = 8.25 * 3600
+_HARD_ABORT_SECONDS = 8.5 * 3600
 
 # Minimum wall time required to start training a single ablation (30 min).
 _MIN_TRAIN_TIME_SECONDS = 30 * 60
@@ -69,7 +102,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="ANN_Project Kaggle orchestrator -- serialised full-pipeline runner.",
     )
     parser.add_argument(
-        "--dataset", default="raid", choices=["raid", "detectrl"],
+        "--dataset", default="raid",
         help="Dataset to use (default: raid)",
     )
     parser.add_argument(
@@ -122,6 +155,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--runlog-dataset", default=None, type=str,
         help="Kaggle Dataset handle for persistent run_log (default: auto-derived from --kaggle-dataset, "
              "e.g. tetsujin007/ann-project-runlog)",
+    )
+    parser.add_argument(
+        "--lr", default=2e-5, type=float,
+        help="Peak learning rate (default: 2e-5, passed through to train.py as --training.lr)",
+    )
+    parser.add_argument(
+        "--weight-decay", default=0.01, type=float, dest="weight_decay",
+        help="Weight decay (default: 0.01, passed through to train.py as --training.weight_decay)",
+    )
+    parser.add_argument(
+        "--grad-clip-norm", default=1.0, type=float, dest="grad_clip_norm",
+        help="Gradient clipping norm (default: 1.0, passed through to train.py as --training.grad_clip_norm)",
     )
     return parser
 
@@ -234,6 +279,15 @@ def install_deps(kaggle_mode: bool, requirements_path: Path) -> None:
     else:
         print(f"[DEPS] Dependencies installed in {elapsed:.1f}s", flush=True)
 
+    # Install project package in editable mode for src.* imports
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-e", "."],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    print("[DEPS] Project package installed in editable mode", flush=True)
+
     _print_package_versions()
 
 
@@ -267,32 +321,66 @@ def _print_package_versions() -> None:
 _SESSION_START_TIME = time.monotonic()
 
 
+_SESSION_STATE = {"compute_deadline": False, "upload_deadline": False}
+
 def check_time_remaining(
     label: str,
     min_seconds: float = _MIN_TRAIN_TIME_SECONDS,
 ) -> bool:
-    """Check whether enough session time remains for a pipeline step."""
-    elapsed = time.monotonic() - _SESSION_START_TIME
-    remaining = _DEFENSIVE_LIMIT_SECONDS - elapsed
+    """Check whether enough session time remains for a pipeline step.
 
-    if remaining <= 0:
+    Implements the three-level timer cascade:
+      1. COMPUTE_DEADLINE – stop new runs, finish current (upload allowed)
+      2. UPLOAD_DEADLINE  – abort uploads, flag partial results
+      3. HARD_ABORT       – sys.exit(1) to prevent SIGKILL corruption
+    """
+    elapsed = time.monotonic() - _SESSION_START_TIME
+
+    remaining_compute = _COMPUTE_DEADLINE_SECONDS - elapsed
+    remaining_upload = _UPLOAD_DEADLINE_SECONDS - elapsed
+    remaining_hard = _HARD_ABORT_SECONDS - elapsed
+
+    # Level 3: Hard abort — prevent Kaggle SIGKILL from corrupting uploads
+    if remaining_hard <= 0:
         print(
-            f"\n[TIMER] Defensive limit ({_DEFENSIVE_LIMIT_SECONDS / 3600:.1f} h) reached.",
+            f"\n[TIMER] HARD ABORT ({_HARD_ABORT_SECONDS / 3600:.1f} h) — "
+            "Session expired. Exiting immediately to prevent SIGKILL corruption.",
             flush=True,
         )
-        print(f"[TIMER] Cannot start '{label}' -- session expired.", flush=True)
+        sys.exit(1)
+
+    # Level 2: Upload deadline — abort mid-upload, keep what's saved
+    if remaining_upload <= 0:
+        print(
+            f"\n[TIMER] UPLOAD_DEADLINE ({_UPLOAD_DEADLINE_SECONDS / 3600:.1f} h) — "
+            "Aborting uploads. Saving partial results.",
+            flush=True,
+        )
+        _SESSION_STATE["upload_deadline"] = True
+        _SESSION_STATE["compute_deadline"] = True
         return False
 
-    if remaining < min_seconds:
+    # Level 1: Compute deadline — finish current run, no new starts
+    if remaining_compute <= 0:
         print(
-            f"\n[TIMER] Only {remaining / 3600:.2f} h remaining,"
+            f"\n[TIMER] COMPUTE_DEADLINE ({_COMPUTE_DEADLINE_SECONDS / 3600:.1f} h) — "
+            "No new training runs. Finishing current. Uploads still allowed.",
+            flush=True,
+        )
+        _SESSION_STATE["compute_deadline"] = True
+        return False
+
+    # Standard: not enough time for this pipeline step
+    if remaining_hard < min_seconds:
+        print(
+            f"\n[TIMER] Only {remaining_hard / 3600:.2f} h remaining,"
             f" but '{label}' needs ~{min_seconds / 3600:.2f} h.", flush=True,
         )
         print("[TIMER] Deferring to next session.", flush=True)
         return False
 
     print(
-        f"[TIMER] ~{remaining / 3600:.2f} h remaining. Proceeding with '{label}'.",
+        f"[TIMER] ~{remaining_hard / 3600:.2f} h remaining. Proceeding with '{label}'.",
         flush=True,
     )
     return True
@@ -339,9 +427,14 @@ def run_pipeline_step(
 
 
 def find_checkpoint(
-    artifact_dir: Path, dataset: str, ablation: str,
+    artifact_dir: Path, dataset: str, ablation: str, seed: int = 42,
 ) -> Path | None:
-    """Locate a trained checkpoint for dataset + ablation."""
+    """Locate a trained checkpoint for dataset + ablation + seed."""
+    # Seed-specific checkpoint (multi-seed runs)
+    ckpt = artifact_dir / f"{dataset}_{ablation}_seed{seed}_best.pt"
+    if ckpt.exists():
+        return ckpt
+    # Legacy: no seed in name (default seed=42)
     ckpt = artifact_dir / f"{dataset}_{ablation}_best.pt"
     if ckpt.exists():
         return ckpt
@@ -440,6 +533,8 @@ def _upload_run_log(runlog_dataset_handle: str, run_log_path: Path) -> None:
     JSON file (~2 KB) — fast and cheap.  ``_download_previous_run_log``
     fetches it on the next session's startup.
     """
+    if _SESSION_STATE.get("upload_deadline"):
+        return
     if not run_log_path.exists():
         return
     print(
@@ -481,6 +576,8 @@ def _upload_results_snapshot(
 
     Silently no-ops when ``kaggle_mode`` is False (local execution).
     """
+    if _SESSION_STATE.get("upload_deadline"):
+        return
     if not kaggle_mode:
         return
     if not results_dir.exists() and not run_log_path.exists():
@@ -573,22 +670,37 @@ def _restore_results_snapshot(
 def is_ablation_completed(
     run_log: dict[str, Any], dataset: str, ablation: str,
     epochs: int, batch_size: int, seed: int,
+    lr: float | None = None, weight_decay: float | None = None,
+    grad_clip_norm: float | None = None,
 ) -> bool:
     """Check whether an ablation was already completed with matching params.
 
     The run-log key includes the seed so that each seed+ablation combination
-    is tracked independently.  Compares *epochs*, *batch_size*, and *seed*
-    so that changing any of them triggers a re-run.
+    is tracked independently.  Compares *epochs*, *batch_size*, *seed*, and
+    hyperparameters (*lr*, *weight_decay*, *grad_clip_norm*) so that
+    changing any of them triggers a re-run.
     """
     completed: dict = dict(run_log.get("completed_ablations") or {})
     entry = completed.get(f"{dataset}_{ablation}_seed{seed}")
     if entry is None:
         return False
-    return (
+    base_ok = (
         entry.get("epochs") == epochs
         and entry.get("batch_size") == batch_size
         and entry.get("seed") == seed
     )
+    if not base_ok:
+        return False
+    # Optional hyperparameter checks (added in v2 — older entries won't have them)
+    hp_checks = {
+        "lr": lr, "weight_decay": weight_decay, "grad_clip_norm": grad_clip_norm,
+    }
+    for hp_name, hp_value in hp_checks.items():
+        if hp_value is not None:
+            stored = entry.get(hp_name)
+            if stored is not None and stored != hp_value:
+                return False
+    return True
 
 
 def mark_ablation_completed(
@@ -602,11 +714,15 @@ def mark_ablation_completed(
     training_time: float,
     eval_output: str | None,
     benchmark_ok: bool,
+    lr: float | None = None,
+    weight_decay: float | None = None,
+    grad_clip_norm: float | None = None,
 ) -> None:
     """Record an ablation as completed in the run log.
 
     The key includes the seed so that multi-seed runs are tracked
-    independently per seed+ablation combination.
+    independently per seed+ablation combination.  Stores hyperparameters
+    so that *is_ablation_completed* can detect config drift.
     """
     run_log.setdefault("completed_ablations", {})
     key = f"{dataset}_{ablation}_seed{seed}"
@@ -616,6 +732,9 @@ def mark_ablation_completed(
         "epochs": epochs,
         "batch_size": batch_size,
         "seed": seed,
+        "lr": lr,
+        "weight_decay": weight_decay,
+        "grad_clip_norm": grad_clip_norm,
         "checkpoint": checkpoint or "",
         "training_time_seconds": round(training_time, 2),
         "evaluation_output": eval_output or "",
@@ -733,6 +852,8 @@ def main() -> None:
             if args.resume and is_ablation_completed(
                 run_log, dataset, ablation_name,
                 args.epochs, args.batch_size, current_seed,
+                lr=args.lr, weight_decay=args.weight_decay,
+                grad_clip_norm=args.grad_clip_norm,
             ):
                 print(
                     f"[RESUME] {dataset}_{ablation_name} already completed"
@@ -751,6 +872,9 @@ def main() -> None:
                 f"--training.epochs={args.epochs}",
                 f"--training.batch_size={args.batch_size}",
                 f"--training.seed={current_seed}",
+                f"--training.lr={args.lr}",
+                f"--training.weight_decay={args.weight_decay}",
+                f"--training.grad_clip_norm={args.grad_clip_norm}",
             ]
 
             # Train
@@ -774,9 +898,9 @@ def main() -> None:
 
             # Locate the resulting checkpoint
             checkpoint_path: Path | None = (
-                artifact_dir / f"{dataset}_{ablation_name}_best.pt"
+                artifact_dir / f"{dataset}_{ablation_name}_seed{current_seed}_best.pt"
                 if args.dry_run
-                else find_checkpoint(artifact_dir, dataset, ablation_name)
+                else find_checkpoint(artifact_dir, dataset, ablation_name, current_seed)
             )
 
             if checkpoint_path is None:
@@ -790,8 +914,8 @@ def main() -> None:
                     )
                 if not args.dry_run:
                     save_run_log(run_log_path, run_log)
-                    _upload_run_log(runlog_dataset_handle, run_log_path)
-                    _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset)
+                    _with_retry(lambda: _upload_run_log(runlog_dataset_handle, run_log_path), "runlog upload")
+                    _with_retry(lambda: _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset), "results snapshot")
                 session_info["ablations_run"].append({
                     "ablation": ablation_name,
                     "checkpoint": None,
@@ -803,19 +927,13 @@ def main() -> None:
                 if not args.dry_run:
                     print(
                         f"[WARN] Training for {ablation_name} returned non-zero."
-                        " Skipping eval and benchmark.", flush=True,
+                        " Not marking completed -- will retry on next --resume run.",
+                        flush=True,
                     )
-                mark_ablation_completed(
-                    run_log, dataset, ablation_name,
-                    args.epochs, args.batch_size, current_seed,
-                    checkpoint=str(checkpoint_path),
-                    training_time=training_time,
-                    eval_output=None, benchmark_ok=False,
-                )
                 if not args.dry_run:
                     save_run_log(run_log_path, run_log)
-                    _upload_run_log(runlog_dataset_handle, run_log_path)
-                    _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset)
+                    _with_retry(lambda: _upload_run_log(runlog_dataset_handle, run_log_path), "runlog upload")
+                    _with_retry(lambda: _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset), "results snapshot")
                 session_info["ablations_run"].append({
                     "ablation": ablation_name,
                     "checkpoint": str(checkpoint_path),
@@ -828,6 +946,7 @@ def main() -> None:
             eval_cmd = [
                 sys.executable, "-u", "scripts/evaluate.py",
                 "--dataset", dataset,
+                "--seed", str(current_seed),
                 "--checkpoint", str(checkpoint_path.resolve()),
                 "--output", str(eval_output_path.resolve()),
             ]
@@ -860,17 +979,26 @@ def main() -> None:
 
             # Persist run log
             if not args.dry_run:
-                mark_ablation_completed(
-                    run_log, dataset, ablation_name,
-                    args.epochs, args.batch_size, current_seed,
-                    checkpoint=str(checkpoint_path),
-                    training_time=training_time,
-                    eval_output=str(eval_output_path) if eval_ok else None,
-                    benchmark_ok=bool(benchmark_ok),
-                )
+                if eval_ok:
+                    mark_ablation_completed(
+                        run_log, dataset, ablation_name,
+                        args.epochs, args.batch_size, current_seed,
+                        checkpoint=str(checkpoint_path),
+                        training_time=training_time,
+                        eval_output=str(eval_output_path),
+                        benchmark_ok=bool(benchmark_ok),
+                        lr=args.lr, weight_decay=args.weight_decay,
+                        grad_clip_norm=args.grad_clip_norm,
+                    )
+                else:
+                    print(
+                        f"[WARN] Evaluation for {ablation_name} failed."
+                        " Not marking completed -- will retry on next --resume run.",
+                        flush=True,
+                    )
                 save_run_log(run_log_path, run_log)
-                _upload_run_log(runlog_dataset_handle, run_log_path)
-                _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset)
+                _with_retry(lambda: _upload_run_log(runlog_dataset_handle, run_log_path), "runlog upload")
+                _with_retry(lambda: _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset), "results snapshot")
 
             session_info["ablations_run"].append({
                 "ablation": ablation_name,
@@ -885,12 +1013,12 @@ def main() -> None:
         session_info["completed_at"] = datetime.now(timezone.utc).isoformat()
         run_log.setdefault("sessions", []).append(session_info)
         save_run_log(run_log_path, run_log)
-        _upload_run_log(runlog_dataset_handle, run_log_path)
-        _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset)
+        _with_retry(lambda: _upload_run_log(runlog_dataset_handle, run_log_path), "runlog upload")
+        _with_retry(lambda: _upload_results_snapshot(kaggle_mode, results_dir, run_log_path, args.kaggle_dataset), "results snapshot")
 
     # 6. Upload outputs (Kaggle only)
     if not args.dry_run and kaggle_mode and args.upload:
-        upload_outputs(output_dir, args.kaggle_dataset, artifact_dir, results_dir)
+        upload_outputs(output_dir, args.kaggle_dataset, artifact_dir, results_dir, run_log_path)
 
     # 7. Final summary
     _print_final_summary(session_info, args.dry_run)
@@ -951,6 +1079,7 @@ def upload_outputs(
     dataset_handle: str,
     artifact_dir: Path,
     results_dir: Path,
+    run_log_path: Path | None = None,
 ) -> None:
     """Upload results/ + artifacts/ + run_log.json to Kaggle Dataset via kagglehub.
 
@@ -960,7 +1089,10 @@ def upload_outputs(
 
     Falls back gracefully if ``kagglehub`` is not installed or the upload fails.
     """
-    run_log = output_dir / "run_log.json"
+    if _SESSION_STATE.get("upload_deadline"):
+        print("[UPLOAD] UPLOAD_DEADLINE reached — skipping full archive upload.", flush=True)
+        return
+    run_log = run_log_path if run_log_path else output_dir / "run_log.json"
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     archive_name = f"ann_project_run_{timestamp}.tar.gz"

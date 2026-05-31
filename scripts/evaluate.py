@@ -10,7 +10,7 @@ Usage
     python scripts/evaluate.py
     python scripts/evaluate.py --checkpoint artifacts/distilbert_detector/ablation_b_best.pt
     python scripts/evaluate.py --dataset raid --checkpoint ablation_b_best.pt --output results.json
-    python scripts/evaluate.py --dataset detectrl --config override.json
+    python scripts/evaluate.py --dataset raid --config override.json
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import warnings
 from pathlib import Path
 from typing import Any
 
@@ -27,11 +26,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-# Ensure the project root is on sys.path (editable install from src/ isn't
-# always resolved when running the script directly).
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent  # src/ importable via pip install -e .
 
 # ---------------------------------------------------------------------------
 # Configuration — lazily loaded from YAML with hardcoded fallback defaults
@@ -43,14 +38,31 @@ from src.training.trainer import seed_everything
 # Module-level defaults (overridden by _init_config on first call)
 ARTIFACT_DIR: str = "artifacts/distilbert_detector"
 CHECKPOINT_FALLBACKS: list[str] = [
+    # Seed-42 variants (primary fallback)
+    "artifacts/distilbert_detector/raid_baseline1_seed42_best.pt",
+    "artifacts/distilbert_detector/raid_ablation_a_seed42_best.pt",
+    "artifacts/distilbert_detector/raid_ablation_b_seed42_best.pt",
+    "artifacts/distilbert_detector/raid_ablation_c_seed42_best.pt",
+    # Legacy non-seed variants (secondary fallback)
+    "artifacts/distilbert_detector/raid_baseline1_best.pt",
     "artifacts/distilbert_detector/baseline1_best.pt",
+    "artifacts/distilbert_detector/raid_ablation_a_best.pt",
+    "artifacts/distilbert_detector/ablation_a_best.pt",
+    "artifacts/distilbert_detector/raid_ablation_b_best.pt",
     "artifacts/distilbert_detector/ablation_b_best.pt",
+    "artifacts/distilbert_detector/raid_ablation_c_best.pt",
     "artifacts/distilbert_detector/ablation_c_best.pt",
 ]
 BATCH_SIZE: int = 32
 MAX_LENGTH: int = 256
-NUM_WORKERS: int = 4
+NUM_WORKERS: int = 6
 SEED: int = 42
+PIN_MEMORY: bool = True
+PREFETCH_FACTOR: int = 2
+SAMPLES_PER_CLASS: int = 60_000
+UNSEEN_CAP: int = 10_000
+TOKENIZATION_MODE: str = "on_the_fly"
+PROCESSED_DIR: Path = _PROJECT_ROOT / "data" / "processed"  # overwritten by _init_config() if cfg.data.processed_dir is set
 DEVICE: str = "cpu"
 _CFG_INITIALIZED: bool = False
 
@@ -58,6 +70,7 @@ _CFG_INITIALIZED: bool = False
 def _init_config() -> None:
     """Lazy-load configuration from default YAML."""
     global ARTIFACT_DIR, CHECKPOINT_FALLBACKS, BATCH_SIZE, MAX_LENGTH, NUM_WORKERS, SEED, DEVICE, _CFG_INITIALIZED
+    global PIN_MEMORY, PREFETCH_FACTOR, SAMPLES_PER_CLASS, UNSEEN_CAP, TOKENIZATION_MODE
     if _CFG_INITIALIZED:
         return
     try:
@@ -70,9 +83,20 @@ def _init_config() -> None:
         MAX_LENGTH = _cfg.data.max_length
         NUM_WORKERS = _cfg.training.num_workers
         SEED = _cfg.training.seed
+        PIN_MEMORY = _cfg.training.pin_memory
+        PREFETCH_FACTOR = _cfg.training.prefetch_factor
+        SAMPLES_PER_CLASS = _cfg.data.samples_per_class
+        UNSEEN_CAP = _cfg.data.unseen_cap
+        TOKENIZATION_MODE = _cfg.data.tokenization_mode
+        if _cfg.data.processed_dir:
+            global PROCESSED_DIR
+            PROCESSED_DIR = Path(_cfg.data.processed_dir)
     except Exception as exc:
-        warnings.warn(f"Config load failed ({exc}); using hardcoded fallback defaults")
-        # Module-level defaults already set above
+        import traceback
+        traceback.print_exc()
+        print(f"FATAL: Config load failed ({exc}). Cannot continue with hardcoded defaults.", file=sys.stderr)
+        sys.exit(1)
+        # Module-level defaults above are unused — we exit before reaching them
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     seed_everything(SEED)
     _CFG_INITIALIZED = True
@@ -156,7 +180,7 @@ def load_checkpoint(path: str | None = None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def run_eval(
     model: nn.Module,
     loader: DataLoader,
@@ -226,7 +250,7 @@ def evaluate(
 
     Args:
         checkpoint_path: Path or filename of checkpoint (optional — uses fallback).
-        dataset: Dataset name (``"raid"`` or ``"detectrl"``). Defaults to ``"raid"``.
+        dataset: Dataset name (``"raid"`` only; ``"detectrl"`` support removed). Defaults to ``"raid"``.
         config_override: Optional dict overriding model config from checkpoint.
 
     Returns:
@@ -294,14 +318,34 @@ def evaluate(
     print(f"  Device        : {device}")
 
     # ── Load data ────────────────────────────────────────────────────────
-    print(f"\nLoading data (dataset={dataset})...")
-    _, _, test_loader, unseen_loader = _prepare_dataloaders_on_the_fly(
-        dataset,
-        batch_size=BATCH_SIZE,
-        num_workers=NUM_WORKERS,
-        max_length=MAX_LENGTH,
-        seed=SEED,
-    )
+    print(f"\nLoading data (dataset={dataset}, tokenization_mode={TOKENIZATION_MODE})...")
+    if TOKENIZATION_MODE == "cached":
+        from src.data.dataloader import _prepare_dataloaders_cached
+        _, _, test_loader, unseen_loader = _prepare_dataloaders_cached(
+            dataset,
+            processed_dir=PROCESSED_DIR,
+            batch_size=BATCH_SIZE,
+            num_workers=NUM_WORKERS,
+            max_length=MAX_LENGTH,
+            seed=SEED,
+            pin_memory=PIN_MEMORY,
+            prefetch_factor=PREFETCH_FACTOR,
+            samples_per_class=SAMPLES_PER_CLASS,
+            unseen_cap=UNSEEN_CAP,
+        )
+    else:
+        _, _, test_loader, unseen_loader = _prepare_dataloaders_on_the_fly(
+            dataset,
+            processed_dir=PROCESSED_DIR,
+            batch_size=BATCH_SIZE,
+            num_workers=NUM_WORKERS,
+            max_length=MAX_LENGTH,
+            seed=SEED,
+            pin_memory=PIN_MEMORY,
+            prefetch_factor=PREFETCH_FACTOR,
+            samples_per_class=SAMPLES_PER_CLASS,
+            unseen_cap=UNSEEN_CAP,
+        )
 
     # ── Run evaluation ───────────────────────────────────────────────────
     print("Evaluating on seen (test) split...")
@@ -442,11 +486,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate a trained DistilBERT checkpoint on held-out data.",
     )
-    parser.add_argument(
-        "--dataset",
-        choices=["raid", "detectrl"],
-        default="raid",
-        help="Dataset to use (default: raid).",
+    parser.add_argument("--dataset", default="raid",
     )
     parser.add_argument(
         "--checkpoint",
@@ -472,7 +512,7 @@ def main() -> None:
         default=None,
         help="Path to save metrics as JSON (e.g. results.json).",
     )
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
 
     config_override: dict[str, Any] | None = None
     if args.config:

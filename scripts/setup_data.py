@@ -99,12 +99,7 @@ def main() -> None:
     args = parser.parse_args()
 
     processed_dir = args.processed_dir
-    raw_path = args.skip_download and RAW_PARQUET or (
-        args.processed_dir.parent.parent / "raw" / "raid" / "raid_full.parquet"
-        if args.processed_dir != PROCESSED_DIR
-        else RAW_PARQUET
-    )
-    # ^ keep default raw path OR derive from custom processed-dir
+    raw_path = RAW_PARQUET
 
     t0 = time.perf_counter()
 

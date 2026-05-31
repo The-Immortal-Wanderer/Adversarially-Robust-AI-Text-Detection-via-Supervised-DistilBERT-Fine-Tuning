@@ -1,14 +1,18 @@
 """
 Research Paper Figure Generation Script
-Figures 4-9: Python-based charts using Plotly and Seaborn
+Figures 3-5: Python-based charts using Plotly and Seaborn
 All data values extracted verbatim from result documents.
 
 Run from: <project_root>/
+Usage:    python scripts/generate_figures.py
 Output:   figures/figure_N_*.png  (300 DPI)
           figures/figure_N_*.html (interactive Plotly)
 
 Requirements:
     pip install plotly kaleido seaborn matplotlib pandas numpy
+
+NOTE: This file mixes top-level definitions and execution calls throughout.
+Run directly (``python scripts/generate_figures.py``), not via import.
 """
 
 from pathlib import Path
@@ -86,12 +90,15 @@ def save_fig(fig, name, plotly=True):
 
 
 # ============================================================
-# FIGURE 3 — Best-Epoch Validation F1 by Ablation Configuration
+# FIGURE S1 — Ablation: Best-Epoch Validation F1 by Configuration (supplementary)
 # Source: artifacts/distilbert_detector/summary.csv (verbatim)
 # Note: Per-epoch series was not persisted to disk during training.
 #       This figure uses the verified best-epoch value for each config.
 # ============================================================
-print("Generating Figure 3: Best-epoch Validation F1...")
+if __name__ != "__main__":
+    import sys
+    print("ERROR: generate_figures.py must be run directly, not imported.", file=sys.stderr)
+    sys.exit(1)
 
 # Verbatim from artifacts/distilbert_detector/summary.csv
 best_val_f1 = {
@@ -140,7 +147,7 @@ fig3.add_hline(
 fig3.update_layout(
     **PLOTLY_LAYOUT,
     title=dict(
-        text='<b>Figure 3: Best-Epoch Validation F1 by Ablation Configuration</b><br>'
+        text='<b>Figure S1: Best-Epoch Validation F1 by Ablation Configuration</b><br>'
              '<span style="font-size:10px; color:#666666;">Per-epoch series not logged; values are the best checkpoint F1 over 3 epochs '
              '(source: artifacts/distilbert_detector/summary.csv)</span>',
         x=0.5,
@@ -151,13 +158,13 @@ fig3.update_layout(
     yaxis_range=[0.930, 0.960],
     width=FIG_W, height=FIG_H,
 )
-save_fig(fig3, 'figure3_best_val_f1')
+save_fig(fig3, 'figure_s1_best_val_f1')
 
 
 # ============================================================
-# FIGURE 4 — Ablation Comparison: Seen vs Unseen F1
+# FIGURE S2 — Ablation: Seen vs Unseen F1 (supplementary)
 # ============================================================
-print("Generating Figure 4: Ablation Seen vs Unseen F1...")
+print("Generating Figure S2: Ablation Seen vs Unseen F1...")
 
 configs     = ['baseline1', 'ablation_a', 'ablation_b\n(val-selected)', 'ablation_c']
 configs_leg = ['baseline1', 'ablation_a', 'ablation_b (val-selected)', 'ablation_c']
@@ -190,7 +197,7 @@ fig4.add_trace(go.Bar(
 fig4.update_layout(
     **PLOTLY_LAYOUT,
     title=dict(
-        text='<b>Figure 4: Seen-Generator vs. Held-Out-Generator F1 by Ablation Configuration</b>',
+        text='<b>Figure S2: Seen-Generator vs. Held-Out-Generator F1 by Ablation Configuration</b>',
         x=0.5,
         xanchor='center'
     ),
@@ -202,13 +209,13 @@ fig4.update_layout(
     width=FIG_W, height=FIG_H,
     legend=dict(**BASE_LEGEND, orientation='h', x=0.5, xanchor='center', y=-0.18)
 )
-save_fig(fig4, 'figure4_ablation_f1_comparison')
+save_fig(fig4, 'figure_s2_ablation_f1_comparison')
 
 
 # ============================================================
-# FIGURE 5 — Relative Robustness Degradation by Configuration
+# FIGURE S3 — Ablation: RRD by Configuration (supplementary)
 # ============================================================
-print("Generating Figure 5: RRD by Configuration...")
+print("Generating Figure S3: Ablation RRD by Configuration...")
 
 rrd_vals  = [1.11, 1.51, 3.13, 2.21]
 bar_colors = [PALETTE[1] if v < 2.0 else PALETTE[3] if v < 3.0 else PALETTE[4] for v in rrd_vals]
@@ -243,7 +250,7 @@ for item in legend_items:
 fig5.update_layout(
     **PLOTLY_LAYOUT,
     title=dict(
-        text='<b>Figure 5: Relative Robustness Degradation (RRD) by Ablation Configuration</b>',
+        text='<b>Figure S3: Relative Robustness Degradation (RRD) by Ablation Configuration</b>',
         x=0.5,
         xanchor='center'
     ),
@@ -253,13 +260,13 @@ fig5.update_layout(
     width=FIG_W, height=FIG_H,
     legend=dict(**BASE_LEGEND, orientation='h', x=0.5, xanchor='center', y=-0.18)
 )
-save_fig(fig5, 'figure5_rrd_by_config')
+save_fig(fig5, 'figure_s3_rrd_by_config')
 
 
 # ============================================================
-# FIGURE 6 — Efficiency Speedup Summary
+# FIGURE 3 — Efficiency Speedup Summary
 # ============================================================
-print("Generating Figure 6: Efficiency Speedup...")
+print("Generating Figure 3: Efficiency Speedup...")
 
 # Removed TC4 latency reduction (%) because mixing x-factor and % on the same axis breaks scale.
 # 54% latency reduction = 2.18x throughput, so they represent the same gain.
@@ -283,7 +290,7 @@ for i, (label, val, unit, color) in enumerate(zip(tc_labels, speedups, units, co
 fig6.update_layout(
     **PLOTLY_LAYOUT,
     title=dict(
-        text='<b>Figure 6: Systems Efficiency Optimisation Gains</b><br>'
+        text='<b>Figure 3: Systems Efficiency Optimisation Gains</b><br>'
              '<span style="font-size:10px; color:#666666;">Note: DataLoader pinning and workers increased GPU utilisation from ~30% to ~90%+ (not plotted).</span>',
         x=0.5,
         xanchor='center'
@@ -293,13 +300,13 @@ fig6.update_layout(
     yaxis_range=[0, 4.5],
     width=FIG_W, height=FIG_H
 )
-save_fig(fig6, 'figure6_efficiency_speedup')
+save_fig(fig6, 'figure3_efficiency_speedup')
 
 
 # ============================================================
-# FIGURE 7 — RAID AUROC: Attack Type x Scoring Model
+# FIGURE 4 — RAID AUROC: Attack Type x Scoring Model
 # ============================================================
-print("Generating Figure 7: RAID AUROC Comparison...")
+print("Generating Figure 4: RAID AUROC Comparison...")
 
 scorers        = ['gpt-j-6B', 'gpt2-xl']
 homo_auroc     = [0.6689, 0.5257]
@@ -364,7 +371,7 @@ fig7.add_hline(
 fig7.update_layout(
     **PLOTLY_LAYOUT,
     title=dict(
-        text='<b>Figure 7: Fast-DetectGPT AUROC on RAID Adversarial Subsets</b><br>'
+        text='<b>Figure 4: GPT-2 XL Perplexity AUROC on RAID Adversarial Subsets</b><br>'
              '<span style="font-size:10px; color:#666666;">Error bars = 95% bootstrap CI (1,000 iterations)</span>',
         x=0.5,
         xanchor='center'
@@ -377,7 +384,7 @@ fig7.update_layout(
     width=FIG_W, height=FIG_H,
     legend=dict(**BASE_LEGEND, orientation='h', x=0.5, xanchor='center', y=-0.18)
 )
-save_fig(fig7, 'figure7_raid_auroc_comparison')
+save_fig(fig7, 'figure4_raid_auroc_comparison')
 
 
 # ============================================================
@@ -438,9 +445,9 @@ save_fig(fig8, 'figure8_three_way_auroc')
 
 
 # ============================================================
-# FIGURE 9 — Quantization Efficiency: Time/Sample and VRAM
+# FIGURE 5 — Quantization Efficiency: Time/Sample and VRAM
 # ============================================================
-print("Generating Figure 9: Quantization Efficiency...")
+print("Generating Figure 5: Quantization Efficiency...")
 
 run_labels_html = [
     'Repro. Baseline<br>(fp16, Kaggle T4)',
@@ -453,7 +460,7 @@ time_per_sample = [2.690, 0.818, 2.327, 1.917, 2.158]
 vram_gib        = [14.0,  3.5,   3.5,   1.8,   1.8]
 colors9         = [PALETTE[1], PALETTE[0], PALETTE[4], PALETTE[0], PALETTE[4]]
 
-fig9 = make_subplots(rows=1, cols=2, 
+fig9 = make_subplots(rows=1, cols=2,
                      subplot_titles=('<b>Inference Time per Sample</b>', '<b>Estimated Peak VRAM</b>'),
                      horizontal_spacing=0.1)
 
@@ -482,21 +489,21 @@ fig9.add_trace(go.Bar(x=[None], y=[None], name='Repro. Baseline (fp16)', marker_
 fig9.add_trace(go.Bar(x=[None], y=[None], name='Paraphrase Attack (NF4)', marker_color=PALETTE[0]), row=1, col=1)
 fig9.add_trace(go.Bar(x=[None], y=[None], name='Homoglyph Attack (NF4)', marker_color=PALETTE[4]), row=1, col=1)
 
-# 8 GB RTX 3050 line
+# 6 GB RTX 4050 line
 fig9.add_hline(
-    y=8.0, line_dash='dash', line_color=PALETTE[3], line_width=1.5,
-    annotation_text='RTX 3050 (8 GiB)',
+    y=6.0, line_dash='dash', line_color=PALETTE[3], line_width=1.5,
+    annotation_text='RTX 4050 (6 GiB)',
     annotation_font=dict(family=FONT, size=TICK_SZ, color=PALETTE[3]),
     annotation_position='top right',
     row=1, col=2
 )
 
-# 3.28x speedup annotation
+# 3.29x speedup annotation
 fig9.add_annotation(
     x=run_labels_html[1], y=1.05,
     ax=-65, ay=-180,
     xref='x1', yref='y1',
-    text='<b>3.28x<br>speedup</b>',
+    text='<b>3.29x<br>speedup</b>',
     showarrow=True,
     arrowhead=2,
     arrowsize=1,
@@ -509,7 +516,7 @@ fig9.add_annotation(
 fig9.update_layout(**PLOTLY_LAYOUT)
 fig9.update_layout(
     title=dict(
-        text='<b>Figure 9: Quantization Efficiency — Inference Time and VRAM by Run</b><br>'
+        text='<b>Figure 5: Quantization Efficiency — Inference Time and VRAM by Run</b><br>'
              '<span style="font-size:10px; color:#666666;">(VRAM figures are estimates derived from model-size parameters)</span>',
         x=0.5,
         xanchor='center'
@@ -528,8 +535,6 @@ for annotation in fig9['layout']['annotations']:
     if annotation['text'] in ['<b>Inference Time per Sample</b>', '<b>Estimated Peak VRAM</b>']:
         annotation['font'] = dict(family=FONT, size=TITLE_SZ-1, color='#1A1A2E')
 
-save_fig(fig9, 'figure9_quantization_efficiency')
+save_fig(fig9, 'figure5_quantization_efficiency')
 
-print("\nAll available figures generated successfully.")
-print("Figure 3 (Training Dynamics) skipped — epoch-level log data required.")
-print("See FIGURE 3 INCOMPLETE comment at top of script for details.")
+print("Supplementary S1-S3 and Figures 3-5 generated. Architecture (Fig 1) and Split Pipeline (Fig 2) not generated by this script.")
