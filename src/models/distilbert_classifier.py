@@ -40,9 +40,10 @@ class DistilBertClassifier(nn.Module):
         self._freeze_layers()
 
     def _freeze_layers(self) -> None:
-        if self.freeze_layers > 0:
-            for parameter in self.distilbert.embeddings.parameters():
-                parameter.requires_grad = False
+        # Always freeze embeddings — matches paper Section III-B claim
+        # that embeddings are frozen across all configurations.
+        for parameter in self.distilbert.embeddings.parameters():
+            parameter.requires_grad = False
 
         for layer_index, layer in enumerate(self.distilbert.transformer.layer):
             requires_grad = layer_index >= self.freeze_layers

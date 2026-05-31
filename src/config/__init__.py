@@ -5,19 +5,21 @@ and CLI override support.
 """
 
 from .config import (
-    DataConfig,
-    TrainingHyperparameters,
     AblationConfig,
+    AblationsConfig,
+    DataConfig,
     PathConfig,
     TrainingConfig,
+    TrainingHyperparameters,
     load_config,
 )
 
 __all__ = [
-    "DataConfig",
-    "TrainingHyperparameters",
     "AblationConfig",
+    "AblationsConfig",
+    "DataConfig",
     "PathConfig",
     "TrainingConfig",
+    "TrainingHyperparameters",
     "load_config",
 ]

@@ -1,4 +1,4 @@
-"""Baseline implementations for DetectRL experiments."""
+"""Baseline implementations for RAID experiments."""
 
 from .perplexity_baseline import run_perplexity_baseline
 from .binoculars_baseline import run_binoculars_baseline

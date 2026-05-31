@@ -12,7 +12,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precisio
 
 
 def compute_metrics(y_true: Any, y_pred: Any, y_prob: Any) -> dict[str, Any]:
-    """Compute the standard binary classification metrics used in DetectRL."""
+    """Compute the standard binary classification metrics used for RAID."""
 
     y_true_array = np.asarray(y_true)
     y_pred_array = np.asarray(y_pred)
@@ -20,6 +20,7 @@ def compute_metrics(y_true: Any, y_pred: Any, y_prob: Any) -> dict[str, Any]:
 
     metrics: dict[str, Any] = {
         "f1_macro": float(f1_score(y_true_array, y_pred_array, average="macro", zero_division=0)),
+
         "accuracy": float(accuracy_score(y_true_array, y_pred_array)),
         "precision": float(precision_score(y_true_array, y_pred_array, zero_division=0)),
         "recall": float(recall_score(y_true_array, y_pred_array, zero_division=0)),
@@ -75,10 +76,12 @@ def compute_ece(
 
     for i in range(n_bins):
         in_bin = (confidences > bin_boundaries[i]) & (confidences <= bin_boundaries[i + 1])
+        if i == 0:
+            in_bin = (confidences >= bin_boundaries[i]) & (confidences <= bin_boundaries[i + 1])
         bin_size = int(in_bin.sum())
         if bin_size == 0:
             continue
-        bin_acc = float(predictions[in_bin].mean())
+        bin_acc = float((predictions[in_bin] == labels_arr[in_bin]).mean())
         bin_conf = float(confidences[in_bin].mean())
         ece += (bin_size / total) * abs(bin_acc - bin_conf)
 

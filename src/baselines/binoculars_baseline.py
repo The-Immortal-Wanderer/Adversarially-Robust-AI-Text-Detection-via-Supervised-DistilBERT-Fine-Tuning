@@ -122,19 +122,33 @@ def _clear_gpu_memory() -> None:
 
 
 def _extract_dataframe(loader: DataLoader) -> pd.DataFrame:
+    """Recover a DataFrame from a DataLoader's backing dataset."""
     dataset = loader.dataset
     if hasattr(dataset, "dataset"):
-        source = dataset.dataset
-    else:
-        source = dataset
+        dataset = dataset.dataset
 
-    if isinstance(source, pd.DataFrame):
-        return source.reset_index(drop=True)
-    if hasattr(source, "to_pandas"):
-        return source.to_pandas().reset_index(drop=True)
-    if hasattr(source, "column_names"):
-        return pd.DataFrame({column: source[column] for column in source.column_names})
-    return pd.DataFrame(source)
+    # OnTheFlyDataset stores raw texts/labels as lists; access them directly
+    if hasattr(dataset, "texts") and hasattr(dataset, "labels"):
+        df = pd.DataFrame({"text": dataset.texts, "label": dataset.labels})
+        if "text" in df.columns and "label" in df.columns:
+            return df
+
+    if isinstance(dataset, pd.DataFrame):
+        df = dataset.reset_index(drop=True)
+        if "text" in df.columns and "label" in df.columns:
+            return df
+    if hasattr(dataset, "to_pandas"):
+        df = dataset.to_pandas().reset_index(drop=True)
+        if "text" in df.columns and "label" in df.columns:
+            return df
+    if hasattr(dataset, "column_names"):
+        df = pd.DataFrame({column: dataset[column] for column in dataset.column_names})
+        if "text" in df.columns and "label" in df.columns:
+            return df
+    df = pd.DataFrame(dataset)
+    if "text" not in df.columns or "label" not in df.columns:
+        raise ValueError(f"DataFrame missing required columns. Found: {list(df.columns)}")
+    return df
 
 
 def _build_text_loader(dataframe: pd.DataFrame, batch_size: int) -> DataLoader:
@@ -158,14 +172,13 @@ def _load_tokenizer(model_name: str) -> AutoTokenizer:
     return tokenizer
 
 
-def _load_model(model_name: str, label: str) -> tuple[AutoModelForCausalLM, dict[str, float]]:
-    """Load a single model and return it along with the post-load memory snapshot."""
+def _load_model(model_name: str, label: str, torch_dtype: str = "float16") -> tuple[AutoModelForCausalLM, dict[str, float]]:
     _clear_gpu_memory()
     before = _print_memory(f"Before loading {label}")
     try:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=DEFAULT_TORCH_DTYPE,
+            torch_dtype=getattr(torch, torch_dtype),
             device_map=DEFAULT_DEVICE_MAP,
             low_cpu_mem_usage=True,
         )
@@ -427,12 +440,12 @@ def run_binoculars_baseline(
     print("\n" + "=" * 60)
     print("Loading observer model")
     print("=" * 60)
-    observer_model, after_observer = _load_model(observer_model_name, "observer")
+    observer_model, after_observer = _load_model(observer_model_name, "observer", config.torch_dtype)
 
     print("\n" + "=" * 60)
     print("Loading target model")
     print("=" * 60)
-    target_model, after_target = _load_model(target_model_name, "target")
+    target_model, after_target = _load_model(target_model_name, "target", config.torch_dtype)
 
     # ── Score validation set → optimise threshold ─────────────────────────
     val_scores, val_labels = _score_loader(
@@ -504,7 +517,7 @@ def run_binoculars_baseline(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the Binoculars baseline on DetectRL.")
+    parser = argparse.ArgumentParser(description="Run the Binoculars baseline on RAID.")
     parser.add_argument("--observer-model", default=DEFAULT_OBSERVER_MODEL)
     parser.add_argument("--target-model", default=DEFAULT_TARGET_MODEL)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)

@@ -1,5 +1,5 @@
 """
-Training loop utilities for DetectRL experiments.
+Training loop utilities for RAID experiments.
 
 Provides seed_everything, run_epoch, and train_ablation for
 DistilBERT ablation training and evaluation.
@@ -16,9 +16,9 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 from torch.utils.data import DataLoader
 
+from src.evaluation.metrics import compute_metrics
 from src.models import DistilBertClassifier
 
 
@@ -36,13 +36,15 @@ def seed_everything(seed: int) -> None:
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    # Cover non-CuDNN ops (scatter_add, index_add, bincount, …)
-    torch.use_deterministic_algorithms(True)
+    # Cover non-CuDNN ops (scatter_add, index_add, bincount, ...)
+    # NOTE: torch.use_deterministic_algorithms(True) is intentionally omitted
+    # because PyTorch 2.x scaled_dot_product_attention lacks a deterministic
+    # implementation, raising RuntimeError on CUDA. CuDNN deterministic +
+    # manual seed (3 sources above) provide sufficient reproducibility for
+    # ablation comparisons.
 
-    torch.Generator().manual_seed(seed)
 
-
-# ── Defensive timer (Kaggle session watchdog) ──────────────────────
+# Defensive timer (Kaggle session watchdog)
 
 
 def make_stop_event() -> threading.Event:
@@ -53,7 +55,7 @@ def make_stop_event() -> threading.Event:
 def _timeout_handler(stop_event: threading.Event) -> None:
     """Set the stop event to signal training loops to halt."""
     stop_event.set()
-    print("[TIMER] Kaggle session limit approaching — stopping training.", flush=True)
+    print("[TIMER] Kaggle session limit approaching - stopping training.", flush=True)
 
 
 def install_defensive_timer(limit_hours: float, stop_event: threading.Event) -> threading.Timer:
@@ -74,29 +76,21 @@ def move_batch_to_device(
     device: torch.device,
 ) -> dict[str, torch.Tensor]:
     """Move a batch of tensors to the specified device."""
-    return {key: value.to(device) for key, value in batch.items()}
+    return {
+        k: v.to(device) if isinstance(v, torch.Tensor) else v
+        for k, v in batch.items()
+    }
 
 
 def _compute_metrics(logits: torch.Tensor, labels: torch.Tensor) -> dict[str, float]:
     """Compute classification metrics from model logits and ground-truth labels.
 
-    Returns dict with keys: accuracy, precision, recall, f1, roc_auc.
+    Thin wrapper around src.evaluation.metrics.compute_metrics for training-loop use.
     """
     probabilities = torch.softmax(logits, dim=-1)[:, 1].detach().cpu().numpy()
     predictions = logits.argmax(dim=-1).detach().cpu().numpy()
     targets = labels.detach().cpu().numpy()
-
-    metrics: dict[str, float] = {
-        "accuracy": float(accuracy_score(targets, predictions)),
-        "precision": float(precision_score(targets, predictions, zero_division=0)),
-        "recall": float(recall_score(targets, predictions, zero_division=0)),
-        "f1_macro": float(f1_score(targets, predictions, average="macro", zero_division=0)),
-    }
-    try:
-        metrics["roc_auc"] = float(roc_auc_score(targets, probabilities))
-    except ValueError:
-        metrics["roc_auc"] = float("nan")
-    return metrics
+    return compute_metrics(targets, predictions, probabilities)
 
 
 def run_epoch(
@@ -105,6 +99,8 @@ def run_epoch(
     optimizer: torch.optim.Optimizer | None = None,
     device: torch.device | None = None,
     grad_clip_norm: float = 1.0,
+    use_amp: bool = False,
+    scaler: torch.amp.GradScaler | None = None,
 ) -> dict[str, float]:
     """Run one training or evaluation epoch.
 
@@ -114,9 +110,12 @@ def run_epoch(
         optimizer: Optimizer for training; ``None`` for evaluation-only.
         device: Target device.  Defaults to CUDA if available else CPU.
         grad_clip_norm: Max gradient norm for clipping (training only).
+        use_amp: Enable ``torch.amp.autocast`` (FP16) for Tensor Cores on
+            compatible GPUs (T4, V100, A100, etc.).  ``True`` also activates
+            ``GradScaler`` to prevent underflow in mixed-precision gradients.
 
     Returns:
-        dict with keys: accuracy, precision, recall, f1, roc_auc, loss.
+        dict with keys: accuracy, precision, recall, f1_macro, roc_auc, loss.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -125,6 +124,8 @@ def run_epoch(
     model.train() if is_train else model.eval()
 
     criterion = nn.CrossEntropyLoss()
+    if scaler is None:
+        scaler = torch.amp.GradScaler(enabled=use_amp)
     running_loss = 0.0
     all_logits: list[torch.Tensor] = []
     all_labels: list[torch.Tensor] = []
@@ -133,17 +134,33 @@ def run_epoch(
         batch = move_batch_to_device(batch, device)
         labels = batch["labels"]
 
-        if is_train:
-            optimizer.zero_grad(set_to_none=True)
-            logits = model(batch["input_ids"], batch["attention_mask"])
-            loss = criterion(logits, labels)
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
-            optimizer.step()
-        else:
-            with torch.no_grad():
-                logits = model(batch["input_ids"], batch["attention_mask"])
-                loss = criterion(logits, labels)
+        try:
+            if is_train:
+                assert optimizer is not None
+                optimizer.zero_grad(set_to_none=True)
+                with torch.amp.autocast(device_type=device.type, enabled=use_amp):
+                    logits = model(batch["input_ids"], batch["attention_mask"])
+                    loss = criterion(logits, labels)
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip_norm)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                with torch.inference_mode():
+                    if use_amp:
+                        with torch.amp.autocast(device_type=device.type, enabled=True):
+                            logits = model(batch["input_ids"], batch["attention_mask"])
+                            loss = criterion(logits, labels)
+                    else:
+                        logits = model(batch["input_ids"], batch["attention_mask"])
+                        loss = criterion(logits, labels)
+        except torch.cuda.OutOfMemoryError:
+            torch.cuda.empty_cache()
+            raise RuntimeError(
+                "CUDA out of memory during evaluation. "
+                "Reduce batch_size or enable AMP (use_amp=True)."
+            ) from None
 
         running_loss += loss.item() * labels.size(0)
         all_logits.append(logits.detach().cpu())
@@ -169,10 +186,11 @@ def train_ablation(
     lr: float = 2e-5,
     weight_decay: float = 0.01,
     grad_clip_norm: float = 1.0,
+    use_amp: bool = False,
 ) -> dict[str, Any]:
     """Train a single ablation configuration: creates model, trains, evaluates."""
     config = {"head_type": head_type, "freeze_layers": freeze_layers}
-    model = DistilBertClassifier(**config).to(device)
+    model = DistilBertClassifier(head_type=head_type, freeze_layers=freeze_layers).to(device)
     optimizer = torch.optim.AdamW(
         (p for p in model.parameters() if p.requires_grad),
         lr=lr,
@@ -182,11 +200,12 @@ def train_ablation(
     best_val_f1 = -1.0
     best_state: dict | None = None
     history: list[dict[str, Any]] = []
+    scaler = torch.amp.GradScaler(enabled=use_amp)
 
     for epoch in range(1, epochs + 1):
         epoch_start = time.perf_counter()
-        train_metrics = run_epoch(model, train_loader, optimizer, device, grad_clip_norm)
-        val_metrics = run_epoch(model, val_loader, device=device, grad_clip_norm=grad_clip_norm)
+        train_metrics = run_epoch(model, train_loader, optimizer, device, grad_clip_norm, use_amp, scaler)
+        val_metrics = run_epoch(model, val_loader, device=device, grad_clip_norm=grad_clip_norm, use_amp=use_amp)
 
         history.append({
             "epoch": epoch,
@@ -207,10 +226,15 @@ def train_ablation(
                 "val_metrics": val_metrics,
             }
 
-    assert best_state is not None
+    if best_state is None:
+        raise RuntimeError(
+            f"Training produced no valid checkpoint state ({ablation_name}). "
+            f"Check that epochs ({epochs}) > 0 and "
+            "val_f1 exceeded initial threshold."
+        )
     model.load_state_dict(best_state["model_state_dict"])
-    test_metrics = run_epoch(model, test_loader, device=device, grad_clip_norm=grad_clip_norm)
-    unseen_metrics = run_epoch(model, unseen_loader, device=device, grad_clip_norm=grad_clip_norm)
+    test_metrics = run_epoch(model, test_loader, device=device, grad_clip_norm=grad_clip_norm, use_amp=use_amp)
+    unseen_metrics = run_epoch(model, unseen_loader, device=device, grad_clip_norm=grad_clip_norm, use_amp=use_amp)
 
     return {
         "ablation_name": ablation_name,
@@ -221,3 +245,4 @@ def train_ablation(
         "unseen_metrics": unseen_metrics,
         "model_state_dict": model.state_dict(),
     }
+

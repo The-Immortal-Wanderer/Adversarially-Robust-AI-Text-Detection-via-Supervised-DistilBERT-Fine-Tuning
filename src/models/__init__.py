@@ -1,4 +1,4 @@
-"""Model definitions for DetectRL experiments."""
+"""Model definitions for RAID experiments."""
 
 from .distilbert_classifier import DistilBertClassifier, count_trainable_parameters
 

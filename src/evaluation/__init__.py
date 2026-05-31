@@ -1,4 +1,4 @@
-"""Evaluation utilities for DetectRL experiments."""
+"""Evaluation utilities for RAID experiments."""
 
 from .metrics import compute_ece, compute_low_fpr_tpr, compute_metrics, compute_rrd
 

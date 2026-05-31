@@ -1,18 +1,18 @@
 """Configuration loader for ANN_Project.
 
 Provides:
-  - ``TrainingConfig`` — top-level dataclass matching ``config/default.yaml``.
+  - ``TrainingConfig`` — top-level dataclass matching ``src/config/default.yaml``.
   - ``load_config(path=None)`` — reads YAML, validates types, applies CLI overrides.
 
 Dependencies
 ------------
-- ``pyyaml`` (>= 6.0)  # <-- required dependency; add to requirements.txt
+- ``pyyaml`` (>= 6.0)
 
 Usage
 -----
 ::
 
-    from config import load_config, TrainingConfig
+    from src.config import load_config, TrainingConfig
 
     cfg: TrainingConfig = load_config()
     print(cfg.training.batch_size)   # 32
@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Type, Union, get_type_hints
 import yaml
 
 # ── Project root detection ────────────────────────────────────────────────────
-# config/ is two levels below project root → parent.parent.parent
+# config/ is three levels below project root → parent.parent.parent
 _PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent.parent
 
 
@@ -60,7 +60,7 @@ class TrainingHyperparameters:
     num_workers: int = 6
     pin_memory: bool = True
     prefetch_factor: int = 2
-    use_amp: bool = False
+    use_amp: bool = False  # Enable AMP (FP16 autocast + GradScaler) for Tensor Cores
 
 
 @dataclass
@@ -95,12 +95,23 @@ class PathConfig:
 
     artifact_dir: str = "artifacts/distilbert_detector"
     checkpoint_fallbacks: List[str] = field(
-        default_factory=lambda: [
-            "artifacts/distilbert_detector/baseline1_best.pt",
-            "artifacts/distilbert_detector/ablation_b_best.pt",
-            "artifacts/distilbert_detector/ablation_c_best.pt",
-        ]
-    )
+    default_factory=lambda: [
+        # Seed-42 variants (primary fallback)
+        "artifacts/distilbert_detector/raid_baseline1_seed42_best.pt",
+        "artifacts/distilbert_detector/raid_ablation_a_seed42_best.pt",
+        "artifacts/distilbert_detector/raid_ablation_b_seed42_best.pt",
+        "artifacts/distilbert_detector/raid_ablation_c_seed42_best.pt",
+        # Legacy non-seed variants (secondary fallback)
+        "artifacts/distilbert_detector/raid_baseline1_best.pt",
+        "artifacts/distilbert_detector/baseline1_best.pt",
+        "artifacts/distilbert_detector/raid_ablation_a_best.pt",
+        "artifacts/distilbert_detector/ablation_a_best.pt",
+        "artifacts/distilbert_detector/raid_ablation_b_best.pt",
+        "artifacts/distilbert_detector/ablation_b_best.pt",
+        "artifacts/distilbert_detector/raid_ablation_c_best.pt",
+        "artifacts/distilbert_detector/ablation_c_best.pt",
+    ]
+)
 
 
 @dataclass
@@ -121,7 +132,8 @@ def _validate_field(value: Any, expected_type: Type, field_name: str) -> None:
     args = getattr(expected_type, "__args__", ())
 
     # Optional[X] → None is always valid
-    if origin is type(Union) or origin is Optional:
+    # Check against Union directly: Optional[T].__origin__ is Union in PEP 484
+    if origin is Union:
         if value is None:
             return
         # Unwrap Optional → validate the inner type
@@ -197,12 +209,19 @@ def _coerce_value(value: Any, expected_type: Type) -> Any:
             elem_type = args[0] if args else str
             return [_coerce_value(v, elem_type) for v in value]
         return value
+    # Handle Union types (e.g., Optional[str]) — isinstance rejects typing.Union on Python <3.12
+    if origin is Union:
+        args = getattr(expected_type, "__args__", ())
+        non_none = [t for t in args if t is not type(None)]
+        if non_none:
+            return _coerce_value(value, non_none[0])
+        return value
     if isinstance(value, expected_type):
         return value
     # String → numeric / bool
     if isinstance(value, str):
         if expected_type is bool:
-            return value.lower() in ("true", "yes", "1")
+            return value.lower() in ("true", "yes", "1", "on")
         if expected_type is int:
             return int(value)
         if expected_type is float:
@@ -214,6 +233,9 @@ def _coerce_value(value: Any, expected_type: Type) -> Any:
         if value == int(value):
             return int(value)
         raise TypeError(f"Cannot coerce float {value} to int without loss")
+    # Int → bool coercion (e.g., --training.pin_memory=0)
+    if expected_type is bool and isinstance(value, int):
+        return bool(value)
     return value
 
 
@@ -269,9 +291,9 @@ def _parse_cli_overrides() -> Dict[str, Any]:
         except ValueError:
             pass
         lower = value.lower()
-        if lower in ("true", "yes", "1"):
+        if lower in ("true", "yes", "1", "on"):
             return True
-        if lower in ("false", "no"):
+        if lower in ("false", "no", "off"):
             return False
         return value
 
@@ -314,7 +336,7 @@ def load_config(path: Optional[str] = None) -> TrainingConfig:
     ----------
     path : str, optional
         Path to a YAML config file.  If ``None`` (default), loads
-        ``<project_root>/config/default.yaml``.
+        ``<project_root>/src/config/default.yaml``.
 
     Returns
     -------
@@ -362,5 +384,6 @@ def load_config(path: Optional[str] = None) -> TrainingConfig:
 # ── CLI entry point (standalone usage) ────────────────────────────────────────
 
 if __name__ == "__main__":
+    import dataclasses
     cfg = load_config()
-    print(yaml.dump(cfg, default_flow_style=False))
+    print(yaml.dump(dataclasses.asdict(cfg), default_flow_style=False))

@@ -2,13 +2,13 @@
 # ANN_Project — Central Configuration (default.yaml)
 # =============================================================================
 # DistilBERT-based AI text detection ablation study config.
-# All paths are relative to the project root (where this file lives under config/).
-# Override any value via CLI: python script.py --data.batch_size 64
+# All paths are relative to the project root (where this file lives under src/config/).
+# Override any value via CLI: python script.py --training.batch_size=64
 # =============================================================================
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 data:
-  # Dataset to use: "raid" or "detectrl"
+  # Dataset to use: "raid"
   dataset: raid
 
   # Tokenization mode: "on_the_fly" (per-worker lazy, default) or "cached" (pre-tokenised .pt)
@@ -56,6 +56,8 @@ training:
   prefetch_factor: 2
 
   # Automatic Mixed Precision (AMP) via torch.cuda.amp
+  # T4 (Turing cc 7.5):   enable for Tensor Core FP16 throughput (~2× speedup)
+  # P100 (Pascal cc 6.0): keep disabled — AMP degrades to ~75-85% of FP32 on Pascal.
   use_amp: false
 
 # ── Ablations ─────────────────────────────────────────────────────────────────
@@ -81,8 +83,16 @@ paths:
 
   # Fallback checkpoint paths for inference / evaluation
   checkpoint_fallbacks:
+    # Seed-42 variants (primary fallback)
+    - artifacts/distilbert_detector/raid_baseline1_seed42_best.pt
+    - artifacts/distilbert_detector/raid_ablation_a_seed42_best.pt
+    - artifacts/distilbert_detector/raid_ablation_b_seed42_best.pt
+    - artifacts/distilbert_detector/raid_ablation_c_seed42_best.pt
+    # Legacy non-seed variants (secondary fallback)
     - artifacts/distilbert_detector/raid_baseline1_best.pt
     - artifacts/distilbert_detector/baseline1_best.pt
+    - artifacts/distilbert_detector/raid_ablation_a_best.pt
+    - artifacts/distilbert_detector/ablation_a_best.pt
     - artifacts/distilbert_detector/raid_ablation_b_best.pt
     - artifacts/distilbert_detector/ablation_b_best.pt
     - artifacts/distilbert_detector/raid_ablation_c_best.pt

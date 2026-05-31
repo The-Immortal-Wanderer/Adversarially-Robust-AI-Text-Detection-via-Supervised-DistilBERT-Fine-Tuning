@@ -1,34 +1,26 @@
-"""Perplexity baseline (log-likelihood) for AI-text detection.
+"""Perplexity baseline (token-level log-likelihood) for AI-text detection.
 
-IMPORTANT NOTE ON NAMING
-------------------------
-This file was originally named ``fast_detectgpt.py`` and is still referred to as
-"Fast-DetectGPT" in the paper.  However, the scoring function implemented here
-computes **plain token-level log-likelihood** (perplexity) under GPT-2 XL,
-*not* the conditional probability curvature that defines true Fast-DetectGPT
-(Bao et al., ICLR 2024).  True Fast-DetectGPT requires a second reference model
-to compute log p(x | model') - log p(x | model), which we do not implement.
+This file implements a perplexity-based zero-shot baseline using GPT-2 XL.
+It computes the average negative log-likelihood (cross-entropy loss) per token
+across the input sequence as the detection score. Referred to as "GPT-2 XL
+Perplexity Baseline" in the paper to distinguish the perplexity scoring function
+from alternative zero-shot approaches like Fast-DetectGPT (Bao et al., ICLR 2024)
+and DetectGPT (Mitchell et al., 2023).
 
-For clarity and to avoid misleading future readers, this file has been renamed
-from ``fast_detectgpt.py`` to ``perplexity_baseline.py``.  The paper retains
-the "Fast-DetectGPT" label to maintain continuity with the cited work and
-because the perplexity baseline follows the same "score-and-threshold" paradigm
-as Fast-DetectGPT, even though it lacks the curvature component.
+True Fast-DetectGPT requires a second reference model to compute conditional
+probability curvature (log p(x | model') - log p(x | model)), which we do not
+implement. The baseline here follows the same "score-and-threshold" paradigm
+but uses plain token-level log-likelihood under GPT-2 XL.
 
-Reference: Bao et al., "Fast-DetectGPT: Efficient zero-shot detection of
-machine-generated text via conditional probability curvature", ICLR 2024.
-
-Implementation
---------------
-Score each text with GPT-2 XL log p(x), optimize a threshold on the
-validation split, then report classification metrics on the seen test and
-unseen test splits.
+Reference for original Fast-DetectGPT:
+Bao et al., ICLR 2024.
 """
 
 from __future__ import annotations
 
 import argparse
 import gc
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -52,7 +44,7 @@ DEFAULT_BATCH_SIZE = 4
 DEFAULT_MAX_LENGTH = 1024
 DEFAULT_STRIDE = 512
 DEFAULT_TORCH_DTYPE = torch.float16
-DEFAULT_DEVICE_MAP = "cuda"
+DEFAULT_DEVICE_MAP = "auto"
 
 
 @dataclass(frozen=True)
@@ -120,19 +112,32 @@ def _clear_gpu_memory() -> None:
 
 
 def _extract_dataframe(loader: DataLoader) -> pd.DataFrame:
+    """Recover a DataFrame from a DataLoader's backing dataset."""
     dataset = loader.dataset
     if hasattr(dataset, "dataset"):
-        source = dataset.dataset
-    else:
-        source = dataset
+        dataset = dataset.dataset
 
-    if isinstance(source, pd.DataFrame):
-        return source.reset_index(drop=True)
-    if hasattr(source, "to_pandas"):
-        return source.to_pandas().reset_index(drop=True)
-    if hasattr(source, "column_names"):
-        return pd.DataFrame({column: source[column] for column in source.column_names})
-    return pd.DataFrame(source)
+    if hasattr(dataset, "texts") and hasattr(dataset, "labels"):
+        df = pd.DataFrame({"text": dataset.texts, "label": dataset.labels})
+        if "text" in df.columns and "label" in df.columns:
+            return df
+
+    if isinstance(dataset, pd.DataFrame):
+        df = dataset.reset_index(drop=True)
+        if "text" in df.columns and "label" in df.columns:
+            return df
+    if hasattr(dataset, "to_pandas"):
+        df = dataset.to_pandas().reset_index(drop=True)
+        if "text" in df.columns and "label" in df.columns:
+            return df
+    if hasattr(dataset, "column_names"):
+        df = pd.DataFrame({column: dataset[column] for column in dataset.column_names})
+        if "text" in df.columns and "label" in df.columns:
+            return df
+    df = pd.DataFrame(dataset)
+    if "text" not in df.columns or "label" not in df.columns:
+        raise ValueError(f"DataFrame missing required columns. Found: {list(df.columns)}")
+    return df
 
 
 def _build_text_loader(dataframe: pd.DataFrame, batch_size: int) -> DataLoader:
@@ -154,13 +159,13 @@ def _load_tokenizer(model_name: str) -> AutoTokenizer:
     return tokenizer
 
 
-def _load_model(model_name: str) -> tuple[AutoModelForCausalLM, dict[str, float], dict[str, float]]:
+def _load_model(model_name: str, torch_dtype: str = "float16") -> tuple[AutoModelForCausalLM, dict[str, float], dict[str, float]]:
     _clear_gpu_memory()
     before = _print_memory("Before loading")
     try:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=DEFAULT_TORCH_DTYPE,
+            torch_dtype=getattr(torch, torch_dtype),
             device_map=DEFAULT_DEVICE_MAP,
             low_cpu_mem_usage=True,
         )
@@ -187,7 +192,8 @@ def _score_text(model: AutoModelForCausalLM, tokenizer: AutoTokenizer, text: str
         return 0.0
 
     device = next(model.parameters()).device
-    total_logprob = 0.0
+    total_nll = 0.0
+    scored_tokens = 0
     step = min(stride, max_length)
 
     for start in range(0, sequence_length, step):
@@ -209,11 +215,14 @@ def _score_text(model: AutoModelForCausalLM, tokenizer: AutoTokenizer, text: str
             else:
                 outputs = model(input_ids=window, attention_mask=attention_mask, labels=labels)
 
-        total_logprob += float((-outputs.loss * target_length).item())
+        total_nll += float((outputs.loss * target_length).item())
+        scored_tokens += target_length
         if end_loc >= sequence_length:
             break
 
-    return total_logprob
+    if scored_tokens == 0:
+        return 0.0
+    return total_nll / scored_tokens
 
 
 def _score_batch(
@@ -343,7 +352,7 @@ def run_perplexity_baseline(
     unseen_text_loader = _build_text_loader(_extract_dataframe(unseen_loader), batch_size=batch_size)
 
     tokenizer = _load_tokenizer(model_name)
-    model, before_load_snapshot, after_load_snapshot = _load_model(model_name)
+    model, before_load_snapshot, after_load_snapshot = _load_model(model_name, config.torch_dtype)
 
     val_scores, val_labels = _score_loader(
         model,
@@ -419,7 +428,7 @@ def run_perplexity_baseline(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the perplexity baseline on DetectRL.")
+    parser = argparse.ArgumentParser(description="Run the perplexity baseline on RAID.")
     parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--max-length", type=int, default=DEFAULT_MAX_LENGTH)
