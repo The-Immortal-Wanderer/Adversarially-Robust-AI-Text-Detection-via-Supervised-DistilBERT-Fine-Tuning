@@ -1,20 +1,20 @@
-# Towards Adversarially Robust AI Text Detection via Supervised DistilBERT Fine-Tuning: A Held-Out-Generator Generalisation Study
+# Towards Adversarially Augmented AI Text Detection via Supervised DistilBERT Fine-Tuning: A Held-Out-Generator Study on RAID
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 **Authors**: Hammad Masood Mirza, Abdul Rafay Rashid  
 **Affiliation**: FAST-NUCES, Islamabad  
-**Paper Status**: Future work — codebase under active development for top-tier venue revision
+**Paper Status**: Submitted to IBCAST 2026; future-work evaluation for top-tier venue
 
 ## Overview
 
-This repository implements an ablation study on **DistilBERT** (66M parameters) for AI-generated text detection, trained on the **RAID** benchmark. The study investigates whether supervised fine-tuning with character-level adversarial perturbations generalises to mechanistically distinct held-out generators (paraphrase, summarisation, prompt-based adversarial).
+This repository implements an ablation study on **DistilBERT** (66M parameters) for AI-generated text detection, trained on the **RAID** benchmark. The study investigates whether supervised fine-tuning on adversarially augmented RAID data generalises to mechanistically distinct held-out generators (gpt3, gpt4, chatgpt, cohere, cohere-chat).
 
 Key contributions:
 - **Ablation study** (2×2 design: head depth × freeze strategy) with 4 configurations
 - **Config-driven training pipeline** with modular source structure under `src/`
-- **Evaluation framework** with multi-seed support, per-attack breakdowns, low-FPR TPR, calibration (ECE), and Fast-DetectGPT baseline
-- Designed for **Kaggle dual-T4 execution** with serialised GPU phases and 8.5h defensive timer
+- **Evaluation framework** with config-driven evaluation, checkpoint fallback resolution, GPT-2 XL Perplexity + Binoculars baselines, and planned support for multi-seed (G1), per-attack, calibration/ECE (G5), and low-FPR TPR (G4) analysis
+- Designed for **Kaggle serial GPU execution** with serialised GPU phases and three-level defensive timer (8h soft-stop, 8.25h mid-upload stop, 8.5h hard abort)
 
 ## Key Results
 
@@ -22,12 +22,12 @@ Key contributions:
 
 | Metric | Value |
 |--------|-------|
-| Relative Robustness Degradation (RRD) | 1.11% – 3.13% |
-| Unseen-split F1 (best) | 0.9267 |
-| ROC-AUC (unseen, average) | 0.9790 |
-| Fast-DetectGPT AUROC (reproduction) | 0.937 |
+| Relative Robustness Degradation (RRD) | 2.05% – 5.38% |
+| Unseen-split F1 (best) | 0.9255 |
+| ROC-AUC (unseen, average) | 0.9686 |
+| GPT-2 XL Perplexity AUROC | 0.937 |
 
-> **Note**: These are single-seed results on an RTX 4050 6GB laptop GPU. The full revision roadmap — including multi-seed evaluation, deduplication, clean-only baseline, per-attack reporting, and calibration analysis — is documented in `.omo/plans/end-to-end-restructure-plan.md`.
+> **Note**: These are single-seed results from a Kaggle GPU run (seed=42, 2026-05-24) on **dedup'd-but-pre-set-exclusion data** (6,029 human texts overlapped between train and unseen pools — see P-003 in the issue registry). Values above are from run_log.json (ablation_b for lower bound, baseline1 for upper bound). RRD values will change after set-exclusion is applied (paper abstract cites the pre-dedup IBCAST range of 1.1-3.1%). The full revision roadmap — including multi-seed evaluation, deduplication, clean-only baseline, per-attack reporting, and calibration analysis — is documented in `.omo/plans/end-to-end-restructure-plan.md`.
 
 ## Ablation Configurations
 
@@ -44,19 +44,19 @@ The study uses a 2×2 design spanning head depth and layer-freezing strategy:
 
 ### RAID (Primary)
 - **Source**: [RAID benchmark](https://github.com/liamdugan/raid) (COLING 2025 Shared Task)
-- **Generators**: llama-70b, gpt-4, chatgpt, cohere, davinci-003 (training); held-out set for evaluation
+- **Generators**: mpt, mistral, llama-chat, gpt2 (training); gpt3, gpt4, chatgpt, cohere, cohere-chat (held-out evaluation)
 - **Domains**: news, reddit, recipes, poetry, abstracts (5 domains after filtering)
-- **Splits**: ~54,000 training pool, held-out generator evaluation set
+- **Splits**: ~120,000 training pool (60K human + 60K AI), held-out generator evaluation set
 
 ### DetectRL (Deprecated)
-The original codebase was built on DetectRL (~120K samples, 2 attack types). The pipeline has since migrated to RAID for richer generator diversity. Historical scripts remain in `src/data/processing/` for reference.
+The original codebase was built on DetectRL (~120K samples, 2 attack types). The pipeline has since migrated to RAID for richer generator diversity. DetectRL-specific scripts have been removed during the Phase 0b restructure.
 
 ## Reproduction
 
 ### Prerequisites
 - Python 3.10+
-- NVIDIA GPU with 8GB+ VRAM (tested on RTX 4050 6GB laptop; target: Kaggle P100/T4)
-- CUDA 12.1
+- NVIDIA GPU with 6GB+ VRAM (tested on RTX 4050 6GB laptop; target: Kaggle P100/T4)
+- CUDA 12.4
 
 ### Setup
 
@@ -89,14 +89,14 @@ python src/data/processing/filter_raid_parallel.py   # or filter_raid_sequential
 python scripts/train.py
 ```
 
-Individual ablation configs are defined in `src/config/default.yaml`. Checkpoints are saved to `artifacts/distilbert_detector/` as `{dataset}_{ablation}_best.pt`.
+Individual ablation configs are defined in `src/config/default.yaml`. Checkpoints are saved to `artifacts/distilbert_detector/` (or `ann-project-runlog/artifacts/` on Kaggle) as `{dataset}_{ablation}_seed{seed}_best.pt` (e.g., `raid_baseline1_seed42_best.pt`).
 
 ### Evaluate
 
 ```bash
 # Evaluate a specific ablation
-python scripts/evaluate.py --ablation baseline1
-python scripts/evaluate.py --ablation ablation_b
+python scripts/evaluate.py --checkpoint artifacts/distilbert_detector/raid_baseline1_seed42_best.pt
+python scripts/evaluate.py --checkpoint artifacts/distilbert_detector/raid_ablation_b_seed42_best.pt
 ```
 
 ### Run Benchmarks
@@ -131,29 +131,46 @@ python scripts/generate_figures.py
 │   │   └── trainer.py        # train_ablation(), seed_everything()
 │   ├── evaluation/           # Metrics
 │   │   └── metrics.py        # compute_metrics, ECE, low-FPR TPR
-│   └── baselines/            # Fast-DetectGPT / perplexity baseline
-│       └── perplexity_baseline.py
+│   └── baselines/            # Perplexity + Binoculars baselines
+│       ├── perplexity_baseline.py
+│       └── binoculars_baseline.py
 ├── scripts/                  # Entry points
 │   ├── train.py              # Unified training
 │   ├── evaluate.py           # Evaluation + checkpoint loading
 │   ├── benchmark.py          # Performance benchmarks
 │   ├── generate_figures.py   # Publication figures
+│   ├── kaggle_run.py         # Kaggle orchestrator + resume
+│   ├── g0_decision_gate.py   # Pre-G1 gate: RRD spread check
+│   ├── setup_data.py         # RAID download + preprocessing
 │   └── sanity_check.py       # Pipeline verification
 ├── data/                     # Data directory (gitignored content)
-│   └── processed/            # Preprocessed parquet files
+│   ├── processed/            # Preprocessed parquet files
+│   ├── raw/                  # Raw source data (gitignored)
+│   └── contamination_audit.md  # Data pipeline contamination audit
+├── notebooks/                # Jupyter notebooks (gitignored; empty after decomposition)
+├── results/                  # g0_decision.json (eval JSONs under ann-project-runlog/results/)
+├── run_logs/                 # Training run logs (gitignored)
+├── ann-project-runlog/       # Kaggle cross-session checkpoints + eval snapshots
 ├── artifacts/                # Training checkpoints and summaries
 │   └── distilbert_detector/
 ├── figures/                  # Publication figures (PNG + HTML)
 ├── benchmark_logs/           # Experimental run logs (gitignored)
-├── paper/                    # LaTeX manuscript
-├── .omo/                     # Issue registry and plans (gitignored)
+├── paper/                    # Placeholder directory (Research_Paper.tex at project root)
+├── .omo/                     # Issue registry and plans (force-add tracked)
 │   ├── issues/               # MASTER_REGISTER.md, AUDIT_TRAIL.md, LESSONS_LEARNED.md
-│   └── plans/                # Revision plans
-├── config/                   # Legacy config (archived)
+│   ├── plans/                # Revision plans
+│   ├── analyses/             # AI review transcripts
+│   ├── evidence/             # Verification evidence files
+│   ├── drafts/               # Draft documents (currently empty)
+│   ├── notepads/            # Release notes etc.
+│   ├── run-continuation/     # Cross-session state
+│   └── submission-review-prompt.md  # Paper submission review prompt
 ├── pyproject.toml            # Package metadata + editable install
 ├── requirements.txt          # pip dependencies
 ├── environment.yml           # Conda environment
 ├── .gitattributes            # Line-ending normalisation
+├── Claude_Suggestions.md       # 1519-line Claude AI guidance transcript
+├── Research_Paper.tex         # IEEEtran LaTeX manuscript
 ├── .gitignore
 └── LICENSE                   # Apache 2.0
 ```
@@ -169,26 +186,29 @@ Experiments were developed and tested on:
 | GPU | **NVIDIA RTX 4050 6GB (laptop)** |
 | CPU | AMD Ryzen 5600X (6 cores / 12 threads) |
 | RAM | 32 GB |
-| CUDA | 12.1 |
+| CUDA | 12.4 |
 
-**Target execution environment**: Kaggle dual T4 ×2 (or P100 single-GPU fallback) for full multi-seed experiments.
+**Target execution environment**: Kaggle T4 or P100 (serial single-GPU pipeline; dual T4 task parallelism deferred — see end-to-end plan for status).
 
 **Optimisations implemented:**
 - **Parallel preprocessing**: 3.58× speedup (tokenisation pipelined across CPU workers)
 - **Optimised DataLoader**: 4–6 workers with pinned memory and CPU-GPU pipeline parallelism
 - **Mixed precision (AMP)**: Automatic mixed precision training on T4; Pascal P100 uses pure FP32 (AMP degrades throughput)
-- **Defensive timer**: 8.5h watchdog for Kaggle session safety
+- **Defensive timer**: Three-level cascade — 8h soft-stop, 8.25h mid-upload stop, 8.5h hard abort for Kaggle session safety
 - **Config-driven pipeline**: YAML configuration for reproducible experiment management
+
+**Kaggle requirements**:
+- **Pre-cache DistilBERT** to a Kaggle Dataset (`{owner}/distilbert-base-uncased`) before multi-session runs — unauthenticated HuggingFace Hub has a 100 req/hr rate limit on shared Kaggle IPs, and each session downloads ~268 MB. See [F-004](.omo/issues/MASTER_REGISTER.md#f-004---distilbert-not-pre-cached-in-kaggle-dataset) in the issue registry.
+- Data on disk is now set-exclusion cleaned: **zero overlapping human texts** between train and unseen pools (verified after regeneration via `scripts/setup_data.py`). Previous runs used contaminated data with 6,029 overlapping humans (~61% of unseen pool).
 
 ## Citation
 
 ```bibtex
 @inproceedings{masood2026towards,
-  title={Towards Adversarially Robust {AI} Text Detection via Supervised {DistilBERT} Fine-Tuning: A Held-Out-Generator Generalisation Study on {RAID}},
+  title={Towards Adversarially Augmented {AI} Text Detection via Supervised {DistilBERT} Fine-Tuning: A Held-Out-Generator Generalisation Study on {RAID}},
   author={Masood Mirza, Hammad and Rafay Rashid, Abdul},
-  booktitle={Proceedings of the...},
+  booktitle={Proc. IBCAST 2026},
   year={2026},
-  note={In preparation}
 }
 ```
 

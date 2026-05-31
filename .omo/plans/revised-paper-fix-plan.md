@@ -1,3 +1,5 @@
+> **SUPERSEDED**: This plan is superseded by `.omo/plans/revised-paper-fix-plan-v2.md` and ultimately by `.omo/plans/end-to-end-restructure-plan.md`. See the end-to-end plan for the current execution strategy.
+
 # Revised Paper Fix Plan (Post-Hyperplan Synthesis)
 
 ## Overview & TL;DR

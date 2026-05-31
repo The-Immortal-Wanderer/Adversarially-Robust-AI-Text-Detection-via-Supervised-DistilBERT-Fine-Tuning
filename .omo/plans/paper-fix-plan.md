@@ -1,3 +1,5 @@
+> **SUPERSEDED**: This plan has been superseded. See `.omo/plans/revised-paper-fix-plan-v2.md` (and ultimately `.omo/plans/end-to-end-restructure-plan.md`) for the current execution strategy. This plan is preserved for historical reference.
+
 # End-to-End Paper Fix Plan: Remaining Gaps After IBCAST Submission
 
 ## TL;DR

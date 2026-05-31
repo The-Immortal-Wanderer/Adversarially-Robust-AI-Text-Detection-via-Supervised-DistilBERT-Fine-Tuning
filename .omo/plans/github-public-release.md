@@ -1,3 +1,6 @@
+> [!CAUTION]
+> **SUPERSEDED / ARCHIVED**: This plan covers an earlier GitHub release of the legacy codebase (DetectRL dataset, old script names). The project has since been restructured for RAID and Kaggle. Current reference: [`end-to-end-restructure-plan.md`](./end-to-end-restructure-plan.md).
+
 # GitHub Public Release: AI-Generated Text Detection — DistilBERT Ablation Study
 
 ## TL;DR
@@ -678,7 +681,7 @@ Max Concurrent: 3 (Wave 2)
 
   ```bibtex
   @inproceedings{masood2025towards,
-    title={Towards Adversarially Robust {AI} Text Detection via Supervised {DistilBERT} Fine-Tuning: A Cross-Attack Generalization Study on {DetectRL}},
+    title={Towards Adversarially Augmented {AI} Text Detection via Supervised {DistilBERT} Fine-Tuning: A Held-Out-Generator Study on {RAID}},
     author={Masood, Hammad and Rafay, Abdul},
     booktitle={Proceedings of the...},
     year={2025},

@@ -1,3 +1,6 @@
+> [!CAUTION]
+> **SUPERSEDED**: This synthesis fed into [`revised-paper-fix-plan-v2.md`](./revised-paper-fix-plan-v2.md) and ultimately the [`end-to-end-restructure-plan.md`](./end-to-end-restructure-plan.md). All active work references the end-to-end plan.
+
 # Hyperplan Synthesis: Adversarial Distillation for Paper Fix Plan
 
 ## Source

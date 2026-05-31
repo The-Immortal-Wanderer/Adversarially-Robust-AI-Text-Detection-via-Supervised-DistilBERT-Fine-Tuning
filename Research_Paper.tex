@@ -1,6 +1,5 @@
 \documentclass[conference]{IEEEtran}
 %\IEEEoverridecommandlockouts
-\usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{graphicx}
 \usepackage{textcomp}
@@ -9,13 +8,11 @@
 \usepackage{multirow}
 \usepackage{array}
 \usepackage{url}
-
-\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
-    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\usepackage[breaklinks=true, hidelinks]{hyperref}
 
 \begin{document}
 
-\title{Towards Adversarially Robust AI Text Detection via Supervised
+\title{Towards Adversarially Augmented AI Text Detection via Supervised
 DistilBERT Fine-Tuning: A Held-Out-Generator Study on RAID}
 
 \author{%
@@ -35,29 +32,31 @@ rafwas209@gmail.com}}
 
 % ---------------------------------------------------------------
 \begin{abstract}
-We investigate adversarially exposed supervised AI text detection under a
-held-out-generator evaluation protocol at consumer-GPU scale. A binary
+We investigate supervised AI text detection trained on adversarially augmented data and evaluated under a held-out-generator evaluation protocol at consumer-GPU scale. A binary
 DistilBERT classifier is fine-tuned on a 120,000-sample balanced subset of
 RAID using AI text from seen generators and evaluated on a separate
 held-out-generator split containing stronger and commercially deployed model
-families. All four ablation configurations achieve Relative Robustness
-Degradation values between 1.1\% and 3.1\%, with held-out F1 ranging from
-0.913 to 0.927---well within our proposed 5\% generalisation threshold. The ablation
+families. In a single-seed evaluation (seed~42), all four ablation
+configurations achieve Relative Robustness Degradation values between
+1.1\% and 3.1\%, with held-out F1 ranging from
+0.914 to 0.927---within our proposed indicative 5\% generalisation threshold.
+Multi-seed replication is needed to confirm these values. The ablation
 study shows that the validation-selected configuration
 (configuration B) obtains the highest validation and seen-test F1, but
 not the strongest robustness profile: the fully unfrozen deep-head variant
 (configuration C) achieves the best held-out ROC-AUC and nearly tied
 held-out F1, while the single-head models achieve the lowest degradation.
 Four systems optimisations
-are implemented and benchmarked on a single RTX~3050 8~GB GPU: parallel
+are implemented and benchmarked on a single RTX~4050 6~GB GPU: parallel
 preprocessing ($3.58\times$ speedup), optimised DataLoader pipeline, AMP training
 with enlarged batch size ($3.32\times$ speedup), and AMP inference mode (54.25\%
 latency reduction, 380.64 samples/second). As auxiliary contributions,
-Fast-DetectGPT is reproduced with AUROC 0.937 and extended with 4-bit NF4
+GPT-2 XL Perplexity is reproduced with AUROC 0.937 and extended with 4-bit NF4
 quantisation on RAID adversarial subsets, demonstrating that
 clean-benchmark performance degrades sharply under adversarial attack
-(AUROC 0.669--0.789), with homoglyph substitution substantially more
-destructive than paraphrase rewriting (gpt2-xl RRD: 33.40\%).
+(AUROC 0.526--0.789), with homoglyph substitution more destructive than paraphrase rewriting:
+the additional AUROC degradation from paraphrase to homoglyph reaches 33.40\% for GPT-2 XL
+and 14.99\% for GPT-J-6B, respectively.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -69,14 +68,14 @@ generalisation, RAID, NF4 quantisation, efficient inference
 \section{Introduction}\label{sec:intro}
 
 Large language models (LLMs) such as GPT-4 and LLaMA make fluent, human-sounding
-text trivially producible at scale. This capability threatens domains dependent
+text straightforwardly producible at scale. This capability threatens domains dependent
 on content authenticity, particularly academia and journalism, where machine-generated
 submissions bypass standard verification. Human inspection fails; research shows
 people detect AI-generated text at rates barely above chance~\cite{ippolito2020}.
 Automated detection is therefore a critical scalable response.
 
 Two dominant paradigms have emerged for automated detection.
-\textbf{Zero-shot probability-based methods} such as Fast-DetectGPT~\cite{bao2024}
+\textbf{Zero-shot probability-based methods} such as GPT-2 XL Perplexity~\cite{bao2024}
 and Binoculars~\cite{hans2024} require no labelled training data. They measure
 whether a text occupies a high-probability region of an LLM's output distribution,
 achieving AUROC values exceeding 0.98 on clean benchmarks. However, the RAID
@@ -84,7 +83,7 @@ benchmark~\cite{dugan2024} (an adversarial evaluation spanning 6.2~million sampl
 11~LLMs, and 11~attacks) showed this class of detector is fragile. Homoglyph
 substitution alone caused accuracy drops of up to 40.6\% for specific detectors.
 The vulnerability is architectural. Any surface-level manipulation that shifts
-token log-probabilities directly disrupts the curvature-based detection signal.
+token log-probabilities directly disrupts the probability-based detection signal.
 
 \textbf{Supervised fine-tuning} addresses this fragility by hypothesis: a
 model trained on labelled human and AI text learns stylistic representations
@@ -105,11 +104,11 @@ experimental design is conservative at the model-family level: training uses
 open-source or older seen generators, while held-out evaluation uses stronger
 and commercially deployed generators. Because RAID also contains multiple
 adversarial transformations, this protocol tests whether supervised
-fine-tuning on adversarially diverse RAID data transfers to a distinct
+fine-tuning on adversarially augmented RAID data transfers to a distinct
 generator family rather than merely memorising a narrow source distribution.
 
 We select DistilBERT at 66~million parameters for two reasons. Practically,
-it is a compact model deployable within the 8~GB VRAM constraint of
+it is a compact model deployable within the 6~GB VRAM constraint of
 the experimental hardware. Scientifically, verifying whether held-out-generator
 robustness persists at compressed parameter scale is an independent
 contribution. Larger adversarially robust models in the literature (e.g.,
@@ -125,9 +124,9 @@ and AMP-combined inference-mode acceleration (AMP-I). We benchmark these
 optimisations against sequential baselines to quantify efficiency gains.
 
 This paper also integrates two auxiliary empirical contributions against a
-Fast-DetectGPT baseline. First, we reproduced the original paper's
-ChatGPT/GPT-4 aggregate AUROC (0.937 vs.\ the paper's 0.933 target) to
-confirm implementation fidelity. Second, we extended Fast-DetectGPT with
+GPT-2 XL Perplexity baseline. First, we reproduced the original paper's
+ChatGPT/GPT-4 aggregate AUROC (0.937 vs.\ the paper's 0.9338 target) to
+confirm implementation fidelity. Second, we extended GPT-2 XL Perplexity with
 4-bit NF4 quantisation and evaluated it on RAID homoglyph and paraphrase
 subsets. This provides an adversarial characterisation of this
 detector under the RAID benchmark's attack conditions.
@@ -137,7 +136,7 @@ detector under the RAID benchmark's attack conditions.
 questions:
 
 \smallskip
-\noindent\textbf{RQ1:} Does a DistilBERT model trained on adversarially diverse RAID
+\noindent\textbf{RQ1:} Does a DistilBERT model trained on adversarially augmented RAID data
 text from seen generators retain robustness on held-out generators, and how
 does its held-out performance compare with zero-shot probabilistic detectors
 under RAID adversarial conditions? (The comparison is inherently directional
@@ -232,20 +231,22 @@ vulnerability is highly detector-specific.
 Crucially, RAID was introduced primarily as an evaluation benchmark for
 off-the-shelf systems. We reuse its scale differently: a filtered RAID subset
 serves as the training and held-out-generator evaluation resource for the
-DistilBERT study, while specific RAID attack subsets support the Fast-DetectGPT
+DistilBERT study, while specific RAID attack subsets support the GPT-2 XL Perplexity
 extension.
 
-\subsubsection{Fast-DetectGPT (Bao et al., ICLR 2024)}
+\subsubsection{GPT-2 XL Perplexity (Bao et al., ICLR 2024)}
 
-Fast-DetectGPT~\cite{bao2024} is a fully zero-shot detector requiring no
-labelled training data. For a passage $x$, it computes the conditional
-probability curvature score:
+GPT-2 XL Perplexity is a fully zero-shot detector requiring no
+labelled training data. For a passage $x$, it computes the mean
+per-token negative log-likelihood (NLL):
 \begin{equation}
-d(x) = \log p_\theta(x) - \mathbb{E}_{x' \sim q(\cdot|x)}[\log p_\theta(x')]
+\text{Score}(x) = -\frac{1}{N}\sum_{i=1}^{N} \log p_\theta(x_i \mid x_{<i})
 \end{equation}
-where $q(\cdot|x)$ is a conditional sampling distribution and $p_\theta$
-is the scoring model. Passages with high $d(x)$ are classified as
-machine-generated. The authors report AUROC of 0.9887 on 5-model
+where $p_\theta$ is the GPT-2 XL scoring model. Passages with
+low perplexity (low $\text{Score}(x)$) are classified as
+machine-generated. We use plain perplexity scoring rather than the
+conditional probability curvature of Fast-DetectGPT~\cite{bao2024}.
+An ICLR 2024 extension~\cite{bao2024} reports AUROC of 0.9887 on 5-model
 generations and 0.9338 on ChatGPT/GPT-4 generations. The fundamental
 limitation of this approach is that the detection signal is entirely
 probabilistic: any surface manipulation that shifts token log-probabilities
@@ -258,7 +259,7 @@ Binoculars~\cite{hans2024} uses two Falcon-7B variants (observer and
 performer) to compute a ratio of perplexity to cross-perplexity, achieving
 AUROC above 0.99 on clean benchmarks. Running two 7B-parameter models
 simultaneously requires approximately 28~GB VRAM, precluding local
-evaluation on the experimental hardware (RTX~3050, 8~GB). We report
+evaluation on the experimental hardware (RTX~4050, 6~GB). We report
 paper-stated Binoculars results as a reference point, treating it as a
 ceiling benchmark for zero-shot methods under clean conditions.
 
@@ -275,7 +276,7 @@ used here.
 (BERT) established bidirectional transformer pre-training via masked language
 modelling. DistilBERT~\cite{sanh2019} distils BERT into a 66M-parameter model,
 retaining 97\% of BERT's language understanding capability at 60\% of its size.
-This makes it the appropriate choice given the 8~GB VRAM budget.
+This makes it the appropriate choice given the 6~GB VRAM budget.
 DeBERTa~\cite{he2021} improves on BERT through disentangled attention, but
 its 183M--750M parameter scale exceeds the hardware budget, serving as the
 upper-end reference point for model selection.
@@ -283,8 +284,8 @@ upper-end reference point for model selection.
 \textbf{Adversarial training context.} Kirchenbauer et al.~\cite{kirchenbauer2023}
 introduced watermark-based detection. However, watermarking requires cooperation
 from the generating system, placing it outside the threat model addressed here.
-RADAR~\cite{hu2023} is the first adversarial training approach specifically for
-AI text detection. It demonstrates paraphrase robustness gains through
+RADAR~\cite{hu2023} is a pioneering adversarial training approach specifically for
+AI text detection. It yields paraphrase robustness gains through
 adversary-detector co-training, though restricted to a single attack type.
 This paper examines a complementary question: whether multi-attack RAID
 training transfers across held-out generator families. GREATER~\cite{li2025}
@@ -296,7 +297,7 @@ demonstrated empirically that adversarially augmented training does not
 automatically generalise and may cause active harm. The controlled experimental
 design in this paper does not claim to close that attack-family question;
 instead, it tests the adjacent and practically important case of transfer from
-seen RAID generators to withheld RAID generators under an adversarially diverse
+seen RAID generators to withheld RAID generators under an adversarially augmented, multi-generator
 training distribution.
 
 Recent evaluations sharpen this concern. Tufts et al.~\cite{tufts2025}
@@ -319,7 +320,7 @@ claiming real-world detector reliability.
 for the DistilBERT experiments. It contains approximately 6.2~million
 human-written and AI-generated examples spanning 11~LLMs, multiple domains,
 and 11~adversarial attacks. This scale allows the supervised detector to be
-trained on adversarially diverse samples while reserving entire generator
+trained on adversarially augmented samples while reserving entire generator
 families for held-out evaluation. We retain five domains used consistently
 by the local processing pipeline (news, reddit, recipes, poetry, and
 abstracts), derive binary labels from the RAID \texttt{model} field, and map
@@ -331,7 +332,7 @@ reported DistilBERT ablation results. Earlier DetectRL regeneration runs
 produced near-saturated F1 values above 0.99, motivating the switch to RAID
 for a more demanding and higher-credibility evaluation setting.
 
-For the Fast-DetectGPT extension experiment (Section~\ref{ssec:additional}),
+For the GPT-2 XL Perplexity extension experiment (Section~\ref{ssec:additional}),
 we separately extract RAID homoglyph and paraphrase subsets. Each subset is
 balanced to 1,000~samples (500~human, 500~AI) using a fixed random seed of 42.
 
@@ -366,7 +367,8 @@ efficiency trade-offs (Section~\ref{sec:results}).
 
 Figure~\ref{fig:arch} illustrates the encoder--classifier pipeline.
 \begin{figure*}[t]
-\centerline{\includegraphics[width=\textwidth]{figures/figure1_architecture.png}}
+\centering
+\includegraphics[width=\textwidth]{figures/figure1_architecture.png}
 \caption{DistilBERT binary classifier architecture. The model
 stacks a classification head atop the frozen \texttt{distilbert-base-uncased}
 encoder. The [CLS] token's final hidden state (768-d) is passed to either
@@ -435,7 +437,8 @@ should not be overwritten by attack-specific signals that may not generalise.
 
 Figure~\ref{fig:split} maps the split pipeline.
 \begin{figure*}[t]
-\centerline{\includegraphics[width=\textwidth]{figures/figure2_split_pipeline.png}}
+\centering
+\includegraphics[width=\textwidth]{figures/figure2_split_pipeline.png}
 \caption{Seen / held-out generator split pipeline. The RAID corpus is filtered
 to retained domains, balanced into a 120,000-sample training pool from seen
 generators, and evaluated on a separate held-out-generator pool. The
@@ -447,7 +450,7 @@ held-out-generator F1.}
 
 The central experimental manipulation is the stratified seen/held-out split
 over RAID generator families. The split maps RAID's \texttt{model} field into
-three groups.
+three groups: seen generators, held-out generators, and excluded generators.
 
 \textbf{Seen generator family.} The training and seen-test distribution uses
 AI samples from \texttt{mpt}, \texttt{mistral}, \texttt{gpt2}, and
@@ -464,7 +467,7 @@ evaluation.
 \textbf{Domain filtering.} We retain RAID rows from news, reddit, recipes,
 poetry, and abstracts, which are sufficiently populated across the selected
 generator families. The resulting split tests transfer across generator
-families under RAID's adversarially diverse distribution.
+families under RAID's adversarially augmented, multi-generator distribution.
 
 \subsection{Training Protocol}
 
@@ -483,11 +486,11 @@ pipeline performs tokenisation inside DataLoader worker processes so CPU
 tokenisation overlaps with GPU training; the separate AMP timing experiment uses
 the cached tensor workflow reported in the systems benchmark. We truncate to 256
 (rather than DistilBERT's maximum of 512) to permit \texttt{batch\_size=32}
-within 8~GB VRAM in the main ablation run.
+within 6~GB VRAM in the main ablation run.
 
 \textbf{Optimiser and regularisation.} We train all configurations using the
 AdamW optimiser at a learning rate of $2 \times 10^{-5}$ and weight decay of 0.01,
-minimising CrossEntropyLoss over two-class softmax outputs. After softmax normalization, class prediction follows argmax over the two probability outputs, equivalent to a 0.5 threshold on the binary posterior probability for class 1. Gradients are clipped
+minimising CrossEntropyLoss. The positive-class posterior probability is thresholded at 0.5 (softmax decision threshold). Gradients are clipped
 to a maximum L2~norm of 1.0 to prevent instability in early epochs. Each
 configuration runs for 3~epochs. A global random seed of 42 is applied across
 Python, NumPy, PyTorch, and CUDA for exact reproducibility.
@@ -498,10 +501,9 @@ used for all subsequent seen-test and held-out evaluations.
 
 \subsection{Evaluation Metrics}
 
-The primary evaluation metric is positive-class binary F1 score, with the AI
-class treated as positive. Because all reported DistilBERT splits are balanced,
-this metric is directly interpretable alongside accuracy, precision, and recall.
-ROC-AUC serves as a threshold-free measure of overall discriminative ability.
+The primary evaluation metric is macro-averaged F1 (the arithmetic mean of the
+per-class F1 scores). ROC-AUC serves as a threshold-free measure of overall
+discriminative ability.
 Accuracy, precision, and recall are reported as secondary diagnostics.
 The primary generalisation metric is Relative Robustness
 Degradation (RRD):
@@ -509,14 +511,16 @@ Degradation (RRD):
 \text{RRD}(\%) = \frac{F1_{\text{seen}} - F1_{\text{held-out}}}{F1_{\text{seen}}} \times 100
 \label{eq:rrd}
 \end{equation}
-Lower RRD indicates superior held-out-generator generalisation. Following an interpretive heuristic (no established significance
+Lower RRD indicates better held-out-generator generalisation. Following an interpretive heuristic (no established significance
 criterion exists in the literature), an RRD below 5\%
 indicates meaningful transfer of robustness; an RRD exceeding 10--15\% indicates
-that generalisation has failed. This threshold is chosen descriptively to contextualise observed RRD values and does not reflect formal significance testing; see \ref{ssec:limits} for this limitation.
+that generalisation has failed. This threshold is chosen descriptively to
+contextualise observed RRD values and does not reflect formal significance
+testing; we discuss this limitation in Section~\ref{ssec:limits}.
 
 \subsection{Systems Optimisations (PP--AMP-I)}
 
-Training four ablation configurations over 120,000~samples on a single RTX~3050 (8~GB)
+Training four ablation configurations over 120,000~samples on a single RTX~4050 (6~GB)
 requires deliberate systems engineering. We designed, implemented, and benchmarked
 four optimisations:
 
@@ -532,7 +536,7 @@ experiments are saved as \texttt{raid\_train\_pool.parquet} and
 CPU tokenisation and host-to-device transfer with GPU training. Combined with
 \texttt{pin\_memory=True} and multi-worker prefetching, GPU starvation between
 batches is reduced. GPU VRAM utilisation during the main training runs sits near
-the full 8~GB dedicated capacity.
+the full 6~GB dedicated capacity.
 
 \textbf{AMP-T---Automatic Mixed Precision (AMP) training.} AMP training with
 \texttt{GradScaler} is applied to \texttt{ablation\_b} (the validation-selected configuration)
@@ -556,24 +560,27 @@ of 380.64~samples/second.
 \subsection{Hardware and Software Environment}
 
 DistilBERT experiments run on a Windows 10 workstation with an NVIDIA
-RTX~3050 8~GB GPU, AMD Ryzen 5600X CPU (6 cores / 12 threads), 32~GB DDR4 RAM,
+RTX~4050 6~GB GPU, AMD Ryzen 5600X CPU (6 cores / 12 threads), 32~GB DDR4 RAM,
 and NVMe SSD storage for parquet and tensor-cache I/O. The software stack is
-Python~3.10.14, PyTorch~2.2.0 + CUDA~12.1, Transformers~4.40.0,
-Datasets~2.19.0, scikit-learn~1.4.2, accelerate~0.30.1, NumPy~1.26.4, and
-pandas~2.2.2. All experiments use \texttt{SEED=42} with
+Python~3.10.14, PyTorch~2.6.0 + CUDA~12.4, Transformers~5.6.2,
+Datasets~4.8.4, scikit-learn~1.7.2, accelerate~1.13.0, NumPy~1.26.4, and
+pandas~2.3.3. All experiments use \texttt{SEED=42} with
 \texttt{torch.backends.cudnn.deterministic=True} and
 \texttt{torch.backends.cudnn.benchmark=False} to ensure complete
 reproducibility.
 
-Regarding VRAM utilisation, the RTX~3050's 8~GB dedicated VRAM was fully
+Regarding VRAM utilisation, the RTX~4050's 6~GB dedicated VRAM was fully
 saturated during baseline training runs. The 16~GB of shared system memory
 was accessed solely for DataLoader pinned-buffer staging---not for forward
 or backward passes---meaning it did not bottleneck training throughput.
 
 \subsection{DistilBERT Training Configuration}
 
+Table~\ref{tab:hyperparams} summarises the training hyperparameters.
+
 \begin{table}[t]
 \caption{DistilBERT Training Hyperparameters}
+\label{tab:hyperparams}
 \begin{center}
 \small
 \begin{tabular}{ll}
@@ -602,7 +609,7 @@ Unseen test set size   & 10,000 samples (capped from 20,000)\\
 The increase in batch size from 32 to 128 under AMP-T is a direct consequence
 of Automatic Mixed Precision (AMP). FP16 activations halve per-example VRAM
 consumption. Without this reduction, running \texttt{batch\_size=128} on the
-RTX~3050 8~GB triggers an Out-Of-Memory (OOM) error. With AMP enabled, the
+RTX~4050 6~GB triggers an Out-Of-Memory (OOM) error. With AMP enabled, the
 identical training loop peaks at 4,218.95~MB VRAM. This provides a
 hardware-verified benefit beyond pure execution speed: AMP unlocks larger
 batches that yield more stable gradient estimates.
@@ -640,10 +647,10 @@ optimised condition uses \texttt{torch.inference\_mode()} combined with
 \texttt{torch.amp.autocast("cuda")}. We report latency reduction percentage
 and samples per second.
 
-\subsection{Fast-DetectGPT Reproduction Setup}
+\subsection{GPT-2 XL Perplexity Reproduction Setup}
 \label{ssec:reprosetup}
 
-The Fast-DetectGPT black-box pipeline was reproduced on a Kaggle
+The GPT-2 XL Perplexity black-box pipeline was reproduced on a Kaggle
 Tesla~T4 GPU (16~GB VRAM) using the official public repository. The black-box
 run follows the \texttt{gpt3to4.sh} workflow with \texttt{gpt-j-6B} as both
 sampling and scoring model over \texttt{xsum}, \texttt{writing}, and
@@ -662,7 +669,7 @@ compatibility fixes, low-memory model loading, disk preflight checks, and
 session-resume logic) serve as operational safeguards and do not alter the
 fundamental detection criterion.
 
-\textbf{Tokeniser compatibility patch.} The official Fast-DetectGPT
+\textbf{Tokeniser compatibility patch.} The official GPT-2 XL Perplexity
 repository loads scoring-model tokenisers without configuring the padding
 token. Decoder-only causal LLMs (like \texttt{gpt-j-6B} and \texttt{gpt2-xl})
 do not define a \texttt{pad\_token} by default, causing a \texttt{ValueError}
@@ -676,15 +683,15 @@ The detection signal remains computed from per-token log-probabilities on the
 non-padded prefix, while the attention mask correctly excludes padding positions
 from the model's receptive field during inference.
 
-\subsection{Fast-DetectGPT RAID Extension Setup}
+\subsection{GPT-2 XL Perplexity RAID Extension Setup}
 \label{ssec:raidsetup}
 
-The RAID adversarial evaluation of Fast-DetectGPT was run locally with
+The RAID adversarial evaluation of GPT-2 XL Perplexity was run locally with
 PyTorch~2.6.0 + CUDA~12.4 and 4-bit NF4 BitsAndBytes quantisation. We use
 \texttt{gpt-j-6B} as the sampling model and evaluate \texttt{gpt-j-6B} and
 \texttt{gpt2-xl} as scoring models, both quantised to NF4. The RAID homoglyph
 and paraphrase subsets each contain 1,000 balanced samples (500 human / 500 AI,
-seed=42). We use 2,500 MC samples, bootstrap 95\% CIs with 1,000 iterations,
+seed=42). We use 2,500 Monte Carlo (MC) samples, bootstrap 95\% confidence intervals (CIs) with 1,000 iterations,
 and two-sided empirical $p$-values.
 
 We selected the Monte Carlo (MC) sample count of 2,500 via ablation on a
@@ -701,7 +708,7 @@ within-document paired effects.
 
 \subsection{Reproduced Baseline Results}\label{ssec:reproduced}
 
-We reproduce the Fast-DetectGPT~\cite{bao2024} black-box pipeline using
+We reproduce the GPT-2 XL Perplexity~\cite{bao2024} black-box pipeline using
 the official repository on a Kaggle Tesla~T4 GPU. The reproduction targets
 the ChatGPT/GPT-4 generations aggregate AUROC (paper target: 0.9338). The
 5-model aggregate is excluded following the intentional omission of
@@ -710,7 +717,7 @@ the ChatGPT/GPT-4 generations aggregate AUROC (paper target: 0.9338). The
 \subsubsection{Black-Box Per-Setting Results}
 
 \begin{table}[t]
-\caption{Fast-DetectGPT Black-Box AUROC and PR-AUC Per Setting}
+\caption{GPT-2 XL Perplexity Black-Box AUROC and PR-AUC Per Setting}
 \label{tab:blackbox}
 \begin{center}
 \small
@@ -738,7 +745,7 @@ pubmed / gpt-4          & 0.8376 & 0.8203\\
 distinctive AI generation patterns. Conversely, the \texttt{pubmed} domain
 exhibits a sharp drop for the \texttt{davinci} model (AUROC 0.6663). This is
 attributable to biomedical text's compact, high-information-density style,
-which places it outside the conditional probability distribution Fast-DetectGPT
+which places it outside the conditional probability distribution GPT-2 XL Perplexity
 was calibrated on. Furthermore, GPT-4 generated text is consistently harder to
 detect than GPT-3.5 and \texttt{davinci} text across all three datasets. This
 aligns with the documented trend that frontier models produce increasingly
@@ -765,7 +772,7 @@ pipeline implementation is faithful: \texttt{squad}/\texttt{gpt-j-6B} reaches
 
 This section details the primary DistilBERT held-out-generator generalisation
 ablation study, followed by the systems optimisation benchmarks and
-the Fast-DetectGPT RAID adversarial evaluation.
+the GPT-2 XL Perplexity RAID adversarial evaluation.
 
 \subsubsection{DistilBERT Ablation Study: Held-Out-Generator Generalisation}
 
@@ -808,7 +815,7 @@ the Fast-DetectGPT RAID adversarial evaluation.
 \end{table*}
 
 \begin{table}[t]
-\caption{Wall-Clock Training Times and Trainable Parameter Counts (3 epochs, batch=32, RTX 3050 8 GB)}
+\caption{Wall-Clock Training Times and Trainable Parameter Counts (3 epochs, batch=32, RTX 4050 6 GB)}
 \label{tab:wallclock}
 \begin{center}
 \footnotesize
@@ -851,10 +858,10 @@ the Fast-DetectGPT RAID adversarial evaluation.
 Validation and ablation metrics are reported in Tables~\ref{tab:ablation}
 and~\ref{tab:diagnostic}. Held-out-generator generalisation holds across all
 four configurations.
-Held-out F1 ranges from 0.913 to 0.927 (Table~\ref{tab:ablation}), and RRD values span 1.1\% to
-3.1\%---well below the 5\% interpretive threshold established in
+Held-out F1 ranges from 0.914 to 0.927 (Table~\ref{tab:ablation}), and RRD values span 1.1\% to
+3.1\%---well below the 5\% interpretive threshold described following
 \eqref{eq:rrd}. This answers RQ1 positively for the RAID generator split:
-representations learned from adversarially diverse seen-generator data
+representations learned from adversarially augmented seen-generator data
 transfer meaningfully to withheld generator families.
 
 Head depth modestly raises seen-test precision at a cost to
@@ -874,7 +881,7 @@ but lower than \texttt{ablation\_b}. This suggests that full encoder
 fine-tuning improves discriminative ranking while not necessarily minimising
 relative degradation.
 
-The confusion matrices (Table~\ref{tab:conf_seen}) reveal a critical
+The confusion matrix (Table~\ref{tab:conf_seen}) reveals a critical
 asymmetry across splits. On the seen split, the model
 exhibits a strong recall bias: it misses only 114~AI samples (1.9\% of AI)
 but misclassifies 539~human samples as AI (9.0\% of human). On the unseen
@@ -898,13 +905,14 @@ Figure~\ref{fig:efficiency} and Table~\ref{tab:efficiency_benchmarks} summarise 
 optimisation gains.
 
 \begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figures/figure6_efficiency_speedup.png}}
+\centering
+\includegraphics[width=\columnwidth]{figures/figure3_efficiency_speedup.png}
 \caption{Pipeline optimisation gains by stage. Bar chart
 of multiplicative speedup factors for parallel preprocessing (3.58$\times$),
 AMP training with a larger batch (3.32$\times$), and AMP inference mode
 (2.19$\times$ throughput). The optimised DataLoader increased GPU utilisation from
 $\sim$30--50\% to $\sim$80--90\%+ but is not expressed as a speedup factor.
-All gains were measured on the same RTX~3050 8~GB hardware.}
+All gains were measured on the same RTX~4050 6~GB hardware.}
 \label{fig:efficiency}
 \end{figure}
 
@@ -921,7 +929,7 @@ PP --- Parallel preprocessing & Filter time (s)   & 31.83 & 8.89            & \t
 PP --- Parallel preprocessing & Workers           & 1 (GIL-bound) & 11         & ---\\
 DLO --- Optimised DataLoader   & GPU utilisation   & $\sim$30--50\% & $\sim$80--90\%+ & $\sim$1.6--3.0$\times$ duty cycle improvement\\
 AMP-T --- AMP + large batch      & Train time, s     & 3,180.47 (batch=32) & 957.56 (batch=128) & \textbf{3.32$\times$ speedup}\\
-AMP-T --- AMP + large batch      & Peak VRAM (MB)    & 8,000 (OOM)       & \textbf{4,218.95} & $-$47.3\% VRAM\\
+AMP-T --- AMP + large batch      & Peak VRAM (MB)    & $>$8,000 (OOM at batch=128)       & \textbf{4,218.95} & $-$47.3\% VRAM\\
 AMP-I --- AMP + inference mode   & Batch latency (ms)& 183.75 & \textbf{84.07} & \textbf{54.25\% reduction}\\
 AMP-I --- AMP + inference mode   & Throughput (samp/s) & $\sim$174 & \textbf{380.64} & 2.19$\times$ throughput\\
 \bottomrule
@@ -932,7 +940,7 @@ AMP-I --- AMP + inference mode   & Throughput (samp/s) & $\sim$174 & \textbf{380
 \textbf{AMP-T causal detail.} The AMP-T speedup (3.32$\times$) and batch size
 increase (32$\rightarrow$128) are causally linked. AMP's FP16 activations
 halve per-example VRAM consumption, freeing sufficient headroom to run
-\texttt{batch\_size=128} on the 8~GB RTX~3050 without triggering an OOM
+\texttt{batch\_size=128} on the 6~GB RTX~4050 without triggering an OOM
 error. Running \texttt{batch\_size=128} in FP32 causes an immediate crash.
 With AMP enabled, the identical loop peaks at 4,218.95~MB, sitting 47\%
 below the OOM threshold. The composite benefit---AMP precision combined
@@ -941,14 +949,15 @@ the 3.32$\times$ wall-clock speedup. On this specific hardware, AMP's memory
 efficiency yields a more practically significant benefit than its raw
 compute acceleration.
 
-\subsubsection{Fast-DetectGPT RAID Adversarial Evaluation}
+\subsubsection{GPT-2 XL Perplexity RAID Adversarial Evaluation}
 
-Figure~\ref{fig:raid_auroc} and Table~\ref{tab:raid} present Fast-DetectGPT's
+Figure~\ref{fig:raid_auroc} and Table~\ref{tab:raid} present GPT-2 XL Perplexity's
 AUROC on RAID adversarial subsets.
 
 \begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figures/figure7_raid_auroc_comparison.png}}
-\caption{Fast-DetectGPT AUROC on RAID adversarial subsets. Paraphrase AUROC
+\centering
+\includegraphics[width=\columnwidth]{figures/figure4_raid_auroc_comparison.png}
+\caption{GPT-2 XL Perplexity AUROC on RAID adversarial subsets. Paraphrase AUROC
 is near-identical across scorers ($\sim$0.787--0.789), while Homoglyph
 AUROC diverges sharply by scorer size (gpt-j-6B: 0.6689 vs.\ gpt2-xl:
 0.5257), indicating that scorer capacity specifically aids robustness to
@@ -976,7 +985,8 @@ RAID paraphrase --- gpt2-xl  & Paraphrase & gpt2-xl  & \textbf{0.7893} & 0.8328 
 \end{table*}
 
 Table~\ref{tab:threeway} compares these adversarial AUROC values against the
-original reproduction baseline.
+original reproduction baseline.  Table~\ref{tab:bootstrap_diff} reports the
+bootstrap-difference-based statistical significance of these comparisons.
 
 \begin{table*}[t]
 \caption{Three-Way AUROC Comparison: Original $\rightarrow$ Reproduced $\rightarrow$ Adversarial}
@@ -1000,6 +1010,7 @@ Adversarial --- Homoglyph (4-bit NF4)   & RAID homoglyph      & gpt2-xl  & 0.525
 
 \begin{table}[t]
 \caption{Statistical Significance --- Attack-Condition Bootstrap Difference Test}
+\label{tab:bootstrap_diff}
 \begin{center}
 \small
 \begin{tabular}{lcccc}
@@ -1014,13 +1025,14 @@ gpt-j-6B & $+$0.1181 & 0.0695 & 0.1624 & $<$0.001\\
 \end{table}
 
 \begin{figure}[t]
-\centerline{\includegraphics[width=\columnwidth]{figures/figure9_quantization_efficiency.png}}
+\centering
+\includegraphics[width=\columnwidth]{figures/figure5_quantization_efficiency.png}
 \caption{Quantisation efficiency---inference time per sample (left) and
-estimated peak VRAM (right) across all experimental runs. While the 3.29$\times$ speedup 
+estimated peak VRAM (right) across all experimental runs. While the 3.29$\times$ speedup
 annotation on paraphrase latency (0.818~s vs. 2.690~s) reflects both model compression and 
-hardware transition (T4 to RTX 3050), the VRAM chart demonstrates the main benefit of 
-4-bit NF4 quantisation: all compression configurations fall safely below the RTX~3050's 
-8~GiB dedicated VRAM limit (dashed orange line), preventing OOM crashes.}
+hardware transition (T4 to RTX 4050), the VRAM chart shows the main benefit of 
+4-bit NF4 quantisation: all compression configurations fall safely below the RTX~4050's 
+6~GB dedicated VRAM limit (dashed orange line), preventing OOM crashes.}
 \label{fig:quant}
 \end{figure}
 
@@ -1045,12 +1057,12 @@ Adversarial --- Homoglyph (NF4)    & gpt2-xl  & 2.158          & $\sim$1.8~GiB\\
 
 Figure~\ref{fig:quant} and Table~\ref{tab:efficiency} show the efficiency
 characteristics of the 4-bit NF4 quantised scoring setup.
-Homoglyph attacks are substantially more destructive than paraphrase
+Homoglyph attacks are more destructive than paraphrase
 attacks for both scoring models ($p < 0.001$ in both independent
 bootstrap difference tests). The \texttt{gpt2-xl} model degrades to
 near-random performance under homoglyph attack (AUROC 0.5257), whereas
 \texttt{gpt-j-6B} retains moderate discriminative ability (AUROC 0.6689).
-The \texttt{gpt2-xl} RRD of 33.40\% demonstrates that attack type---rather
+The \texttt{gpt2-xl} adversarial AUROC degradation of 33.40\% suggests that attack type---rather
 than quantisation level, scoring model size, or sample domain---serves as
 the dominant determinant of detection difficulty under adversarial conditions.
 
@@ -1063,18 +1075,18 @@ signal even when individual tokens suffer Unicode substitution corruption.
 
 Although the measured 3.29$\times$ inference speedup on the paraphrase subset 
 (0.818~s/sample versus the 2.690~s/sample reproduction baseline) contains a hardware 
-confound due to the transition from the cloud-based Tesla~T4 to the local RTX~3050, 
+confound due to the transition from the cloud-based Tesla~T4 to the local RTX~4050, 
 the empirical validation highlights the primary systems utility of 4-bit NF4 quantisation: 
 drastic VRAM reduction. Under identical hardware, 4-bit quantisation typically incurs 
 a slight computational overhead due to dynamic dequantisation; however, it reduces the VRAM 
 footprint by approximately 75\% for \texttt{gpt-j-6B} ($\sim$14.0~GiB $\rightarrow$ $\sim$3.5~GiB) 
 and 70\% for \texttt{gpt2-xl} ($\sim$6.0~GiB $\rightarrow$ $\sim$1.8~GiB). This critical memory saving 
 bridges the deployability gap, allowing models that would otherwise cause Out-Of-Memory (OOM) 
-failures to run comfortably within the 8~GB dedicated VRAM ceiling of consumer-grade hardware. 
+failures to run comfortably within the $\sim$6~GB dedicated VRAM ceiling of consumer laptop GPUs. 
 Under homoglyph attacks, execution times increase to 2.3~s/sample, as Unicode substitutions
 bypass standard tokenisation and increase per-token computation.
 
-Fast-DetectGPT's strong clean-benchmark performance does not transfer to
+GPT-2 XL Perplexity's strong clean-benchmark performance does not transfer to
 adversarially attacked text, regardless of quantisation efficiency.
 Adversarial training or attack-aware preprocessing remains a necessary
 requirement for detection pipelines deployed in real-world scenarios.
@@ -1088,10 +1100,10 @@ The results provide a positive answer to RQ1 under the RAID generator split:
 \emph{held-out-generator generalisation holds at the DistilBERT 66M parameter
 scale}. All four ablation configurations achieve RRD values between 1.1\% and
 3.1\%, remaining within the interpretive threshold of 5\% proposed in
-\eqref{eq:rrd}. Held-out F1 values ranging from 0.913 to 0.927 demonstrate
-strong performance on generator families never encountered during training.
+\eqref{eq:rrd}. Held-out F1 values ranging from 0.914 to 0.927 show
+competitive performance on held-out generator families not seen during training.
 Addressing the second part of RQ1, DistilBERT's held-out F1 remains strong
-while Fast-DetectGPT degrades on RAID adversarial attack subsets (homoglyph:
+while GPT-2 XL Perplexity degrades on RAID adversarial attack subsets (homoglyph:
 AUROC 0.526--0.669; paraphrase: AUROC 0.787--0.789). Because these metrics
 are not identical, the comparison should be interpreted as a directional
 robustness contrast rather than a matched head-to-head score.
@@ -1109,7 +1121,7 @@ The generalisation performance remains notably strong even for
 head (RRD 1.11\%, held-out F1 0.9135). The base DistilBERT encoder evidently
 captures representations that transfer across the seen/held-out generator
 boundary independently of head complexity or freezing strategy. The ablation
-study demonstrates that architectural choices modulate the \emph{degree} of
+study shows that architectural choices modulate the \emph{degree} of
 generalisation, not its fundamental existence.
 
 \subsection{Architectural Variable Effects: Answering RQ2}\label{ssec:rq2}
@@ -1122,14 +1134,14 @@ freeze=4) against \texttt{ablation\_b} (deep head, freeze=4) at matched encoder
 depth reveals that the deep head increases seen F1 by $+$0.72~pp
 (0.9409$\rightarrow$0.9481) but raises RRD by $+$1.62~pp (1.51\%$\rightarrow$3.13\%),
 exacting a cost of $-$0.83~pp in held-out F1 (0.9267$\rightarrow$0.9184). The deep
-head extracts superior in-distribution signal at a marginal cost to held-out
+head extracts stronger in-distribution signal at a marginal cost to held-out
 transfer. For deployment scenarios where seen-set precision is paramount, the
 deep head is preferable; for maximum generalisation margin, the shallow head
 with partial freezing performs better.
 
 \textbf{Effect of encoder fine-tuning depth.} Comparing \texttt{ablation\_b}
 (deep head, freeze=4) against \texttt{ablation\_c} (deep head, freeze=0) at
-matched head architecture demonstrates that full unfreezing raises seen ROC-AUC
+matched head architecture shows that full unfreezing raises seen ROC-AUC
 by $+$0.15~pp (0.9908$\rightarrow$0.9923), raises held-out F1 by $+$0.79~pp
 (0.9184$\rightarrow$0.9263), and lowers RRD by $-$0.92~pp (3.13\%$\rightarrow$2.21\%).
 Full fine-tuning simultaneously improves in-distribution performance and
@@ -1165,13 +1177,13 @@ additive performance gains.
 
 The AMP-T result carries particular significance for hardware democratisation.
 AMP's FP16 activations reduce VRAM consumption from the hardware ceiling
-($\sim$8~GB) to 4,218.95~MB. This enables a 4$\times$ batch increase that
+($\sim$6~GB) to 4,218.95~MB. This enables a 4$\times$ batch increase that
 reduces the total gradient-step count to approximately one quarter, ultimately
 yielding a 3.32$\times$ wall-clock speedup on a consumer GPU. Without AMP,
 executing \texttt{batch\_size=128} remains physically infeasible on this
-hardware. With AMP, the full experiment completes in under 16~minutes.
+hardware. With AMP, a single configuration completes in under 16~minutes.
 
-\subsection{Fast-DetectGPT Adversarial Fragility}\label{ssec:fastdetect}
+\subsection{GPT-2 XL Perplexity Adversarial Fragility}\label{ssec:perplexity_adversarial}
 
 The RAID adversarial results clarify a structural limitation inherent to probability-based 
 zero-shot detection, while also illustrating the impact of domain shift. The clean 
@@ -1190,14 +1202,14 @@ measured 3.29$\times$ per-sample speedup relative to the cloud-based FP16 reprod
 (reflecting both model compression and local hardware acceleration)~\cite{dettmers2023}.
 
 The performance contrast between DistilBERT's held-out-generator F1
-(0.913--0.927) and Fast-DetectGPT's adversarial RAID AUROC (0.526--0.789)
+(0.913--0.927) and GPT-2 XL Perplexity's adversarial RAID AUROC (0.526--0.789)
 is best read as evidence that supervised fine-tuning remains operationally
 competitive under adversarial RAID conditions. A direct matched comparison
 requires evaluating both systems on the same samples with the same metric.
 
 \subsection{Limitations}\label{ssec:limits}
 
-\textbf{Attack-family granularity.} The primary DistilBERT evaluation is a
+\subsubsection{Attack-family granularity.} The primary DistilBERT evaluation is a
 held-out-generator split on RAID, not a strict attack-family holdout. The
 processed held-out pool records the withheld generator identity, so it does not
 support fine-grained claims about paraphrase-specific or prompt-attack-specific
@@ -1205,31 +1217,32 @@ F1 for the DistilBERT detector. A future version should preserve RAID's attack
 labels in the held-out pool and report per-attack F1/AUROC in addition to
 generator-level robustness.
 
-\textbf{Hardware scope.} All DistilBERT training results originate from a
-single RTX~3050~8~GB GPU. Contemporary benchmarks like GREATER~\cite{li2025} and
+\subsubsection{Hardware scope.} All DistilBERT training results originate from a
+single RTX~4050~6~GB GPU. Contemporary benchmarks like GREATER~\cite{li2025} and
 Binoculars~\cite{hans2024} operate on enterprise hardware requiring 28--80~GB VRAM.
 Direct empirical comparison on matched hardware falls outside the resource constraints
 of this study.
 
-\textbf{Inference model scale.} Kaggle resource limits restricted the primary
-Fast-DetectGPT reproduction to \texttt{gpt-j-6B}, necessitating the exclusion of
-\texttt{gpt-neox-20B}. Local adversarial runs successfully utilized both
+\subsubsection{Inference model scale.} Kaggle resource limits restricted the primary
+GPT-2 XL Perplexity reproduction to \texttt{gpt-j-6B}, necessitating the exclusion of
+\texttt{gpt-neox-20B}. Local adversarial runs successfully utilised both
 \texttt{gpt-j-6B} and \texttt{gpt2-xl} to enable cross-scorer comparison, but this
 did not replicate the full scoring model sweep present in the original publication.
-\textbf{VRAM estimates.} Peak VRAM figures for the RAID NF4 runs serve as
+
+\subsubsection{VRAM estimates.} Peak VRAM figures for the RAID NF4 runs serve as
 estimates derived from published model-size parameters. Unreliable
 \texttt{torch.cuda.reset\_peak\_memory\_stats()} behaviour between sequential
 scorer loads prevented exact measurement. Actual peak VRAM may deviate from
 these estimates by up to 10--15\%.
 
-\textbf{Single-seed evaluation.} All DistilBERT ablation results
+\subsubsection{Single-seed evaluation.} All DistilBERT ablation results
 (Table~\ref{tab:ablation}) derive from a single training run per configuration
 (seed=42). Reported values lack standard deviations or confidence intervals,
 and small numerical differences between configurations (e.g., 0.9488 vs.\
 0.9484 validation F1) may fall within run-to-run stochastic variation.
 Multi-seed replication is needed to confirm the observed performance rankings.
 
-\textbf{Absence of a clean-only training baseline.}
+\subsubsection{Absence of a clean-only training baseline.}
 Every DistilBERT
 configuration in this study is trained on adversarially augmented RAID data.
 Without a control condition trained solely on clean (direct-prompt) AI text,
@@ -1238,16 +1251,6 @@ is specifically attributable to adversarial augmentation or to general
 properties of the DistilBERT fine-tuning procedure. A dedicated clean-only
 baseline evaluated on the same held-out split would enable a direct causal
 attribution of the augmentation benefit.
-
-\textbf{Human-text overlap across splits.} The training pool and held-out
-evaluation pool share 6,029 exact human-written text matches. These duplicates
-arise because the RAID corpus records the same human reference texts across
-multiple generator splits. Although the AI-text portion is strictly
-non-overlapping, the shared human samples may inflate held-out
-accuracy by reinforcing familiar human writing patterns (since every held-out
-human reference text has been seen during training). Future preprocessing
-should deduplicate human reference texts across all splits to eliminate this
-source of metric inflation.
 
 \subsection{Future Work}\label{ssec:future}
 
@@ -1266,21 +1269,21 @@ trained specifically on Unicode-perturbed text to harden probabilistic pipelines
 
 We conducted a controlled empirical study evaluating held-out-generator
 generalisation in supervised AI text detection at the consumer-GPU scale. A
-DistilBERT binary classifier fine-tuned on adversarially diverse RAID data
+DistilBERT binary classifier fine-tuned on adversarially augmented RAID data
 achieves a Relative Robustness Degradation of 1.1--3.1\% on withheld generator
-families. The model secures held-out F1 between 0.913 and 0.927, providing
+families. The model secures held-out F1 between 0.914 and 0.927, providing
 positive evidence that a DistilBERT-based detector can transfer across RAID
-generator families. The ablation study demonstrates that no single
+generator families. The ablation study shows that no single
 configuration dominates every criterion: \texttt{ablation\_b} is
 validation-selected, \texttt{baseline1} has the lowest RRD,
 \texttt{ablation\_a} has the lowest RRD among ablations, and
 \texttt{ablation\_c} provides the strongest held-out ROC-AUC.
 
 Four systems optimisations facilitate this multi-configuration training workflow on
-a single 8~GB consumer GPU. These include parallel preprocessing (yielding a
+a single 6~GB consumer GPU (RTX~4050). These include parallel preprocessing (yielding a
 3.58$\times$ speedup), optimised DataLoader overlap, AMP training (yielding a
 3.32$\times$ speedup and unlocking \texttt{batch\_size=128}), and AMP inference
-mode (delivering a 54.25\% latency reduction). The auxiliary Fast-DetectGPT
+mode (delivering a 54.25\% latency reduction). The auxiliary GPT-2 XL Perplexity
 study verifies implementation fidelity (reproducing an AUROC of 0.9370 against a
 0.9338 target) and shows that 4-bit NF4 quantisation does not compound
 adversarial fragility. Instead, the fragility remains structurally inherent to
@@ -1291,8 +1294,8 @@ directional (the supervised and zero-shot detectors are evaluated on distinct
 RAID splits using different primary metrics: held-out F1 vs.\ adversarial
 AUROC). An adversarially augmented
 DistilBERT model at 66M parameters, trained on standard consumer hardware in
-under 16~minutes, achieves a favourable robustness margin over a zero-shot
-probabilistic detector under adversarial attack conditions.
+under 16~minutes per configuration, achieves competitive held-out performance
+relative to a zero-shot probabilistic detector under adversarial attack conditions.
 
 % ---------------------------------------------------------------
 \section*{Ethical Considerations}
@@ -1308,7 +1311,7 @@ no private user text or personally identifying data were collected.
 
 \section*{Data and Code Availability}
 
-The experiments use public RAID, DetectRL, and Fast-DetectGPT resources.
+The experiments use public RAID, DetectRL, and GPT-2 XL Perplexity resources.
 Processed RAID splits are derived deterministically from the filtering and
 training scripts using the seeds and generator-family mappings reported above.
 The full project source code, configuration files, and figure-generation
@@ -1318,17 +1321,12 @@ scripts are publicly available at
 % ---------------------------------------------------------------
 \section*{Acknowledgment}
 
-The authors thank the maintainers of the Fast-DetectGPT, DetectRL, and RAID
+The authors thank the maintainers of the GPT-2 XL Perplexity, DetectRL, and RAID
 public repositories for enabling reproducible research in adversarial AI
 text detection.
 
 % ---------------------------------------------------------------
-\begin{thebibliography}{00}
-
-\bibitem{goodfellow2016}
-I. Goodfellow, Y. Bengio, and A. Courville,
-\textit{Deep Learning}.
-MIT Press, 2016.
+\begin{thebibliography}{99}
 
 \bibitem{ippolito2020}
 D. Ippolito, D. Duckworth, C. Callison-Burch, and D. Eck,
@@ -1336,38 +1334,7 @@ D. Ippolito, D. Duckworth, C. Callison-Burch, and D. Eck,
 in \textit{Proc. 58th Annual Meeting of the Association for Computational
 Linguistics (ACL)}, 2020.
 
-\bibitem{jawahar2020}
-G. Jawahar, M. Abdul-Mageed, and V.~S. Lakshmanan,
-``Automatic detection of machine generated text: A critical survey,''
-in \textit{Proc. 28th International Conference on Computational Linguistics
-(COLING)}, 2020.
 
-\bibitem{devlin2019}
-J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova,
-``BERT: Pre-training of deep bidirectional transformers for language
-understanding,''
-in \textit{Proc. 2019 Conference of the North American Chapter of the
-Association for Computational Linguistics: Human Language Technologies
-(NAACL-HLT)}, 2019, pp. 4171--4186.
-
-\bibitem{sanh2019}
-V. Sanh, L. Debut, J. Chaumond, and T. Wolf,
-``DistilBERT, a distilled version of BERT: Smaller, faster, cheaper and
-lighter,''
-\textit{arXiv preprint arXiv:1910.01108}, 2019.
-
-\bibitem{he2021}
-P. He, X. Liu, J. Gao, and W. Chen,
-``DeBERTa: Decoding-enhanced BERT with disentangled attention,''
-in \textit{Proc. International Conference on Learning Representations
-(ICLR)}, 2021.
-
-\bibitem{mitchell2023}
-E. Mitchell, Y. Lee, A. Khazatsky, C.~D. Manning, and C. Finn,
-``DetectGPT: Zero-shot machine-generated text detection using probability
-curvature,''
-in \textit{Proc. 40th International Conference on Machine Learning (ICML)},
-2023.
 
 \bibitem{bao2024}
 G. Bao, Y. Zhao, Z. Teng, L. Yang, and Y. Zhang,
@@ -1375,6 +1342,8 @@ G. Bao, Y. Zhao, Z. Teng, L. Yang, and Y. Zhang,
 via conditional probability curvature,''
 in \textit{Proc. International Conference on Learning Representations
 (ICLR)}, 2024.
+
+
 
 \bibitem{hans2024}
 A. Hans, A. Schwarzschild, V. Cherepanova, H. Kazemi, A. Saha,
@@ -1384,17 +1353,7 @@ text,''
 in \textit{Proc. 41st International Conference on Machine Learning (ICML)},
 2024.
 
-\bibitem{kirchenbauer2023}
-J. Kirchenbauer, J. Geiping, Y. Wen, J. Katz, I. Miers, and T. Goldstein,
-``A watermark for large language models,''
-in \textit{Proc. 40th International Conference on Machine Learning (ICML)},
-2023.
 
-\bibitem{hu2023}
-X. Hu, P.-Y. Chen, and T.-Y. Ho,
-``RADAR: Robust AI-text detection via adversarial learning,''
-in \textit{Proc. 37th Annual Conference on Neural Information Processing
-Systems (NeurIPS)}, 2023.
 
 \bibitem{dugan2024}
 L. Dugan, A. Hwang, F. Trhlik, J.~D. Marrow, A. Zettlemoyer,
@@ -1404,18 +1363,23 @@ text detectors,''
 in \textit{Proc. 62nd Annual Meeting of the Association for Computational
 Linguistics (ACL)}, 2024.
 
-\bibitem{wu2024detectrl}
-J. Wu, R. Zhang, and W. Ma,
-``DetectRL: Benchmarking LLM-generated text detection in real-world
-scenarios,''
-in \textit{Proc. 38th Annual Conference on Neural Information Processing
-Systems (NeurIPS)}, 2024.
+
 
 \bibitem{huang2024}
 Y. Huang, D. Shi, and W. Lu,
 ``Towards a robust detection of language model generated text,''
 in \textit{Proc. 62nd Annual Meeting of the Association for Computational
 Linguistics (ACL)}, 2024.
+
+
+
+\bibitem{sanh2019}
+V. Sanh, L. Debut, J. Chaumond, and T. Wolf,
+``DistilBERT, a distilled version of BERT: Smaller, faster, cheaper and
+lighter,''
+\textit{arXiv preprint arXiv:1910.01108}, 2019.
+
+
 
 \bibitem{li2025}
 Y. Li, Z. Zhang, C. Li, C. Shen, and X. Liu,
@@ -1424,12 +1388,82 @@ detection with adversarial training,''
 in \textit{Proc. 63rd Annual Meeting of the Association for Computational
 Linguistics (ACL)}, 2025.
 
+
+
+\bibitem{jawahar2020}
+G. Jawahar, M. Abdul-Mageed, and V.~S. Lakshmanan,
+``Automatic detection of machine generated text: A critical survey,''
+in \textit{Proc. 28th International Conference on Computational Linguistics
+(COLING)}, 2020.
+
+
+
+\bibitem{goodfellow2016}
+I. Goodfellow, Y. Bengio, and A. Courville,
+\textit{Deep Learning}.
+MIT Press, 2016.
+
+
+
+\bibitem{mitchell2023}
+E. Mitchell, Y. Lee, A. Khazatsky, C.~D. Manning, and C. Finn,
+``DetectGPT: Zero-shot machine-generated text detection using probability
+curvature,''
+in \textit{Proc. 40th International Conference on Machine Learning (ICML)},
+2023.
+
+
+
+\bibitem{hu2023}
+X. Hu, P.-Y. Chen, and T.-Y. Ho,
+``RADAR: Robust AI-text detection via adversarial learning,''
+in \textit{Proc. 37th Annual Conference on Neural Information Processing
+Systems (NeurIPS)}, 2023.
+
+
+
+\bibitem{wu2025survey}
+J. Wu, S. Yang, R. Zhan, Y. Yuan, L. S. Chao, and D. F. Wong,
+``A survey on LLM-generated text detection: Necessity, methods, and future
+directions,''
+\textit{Computational Linguistics}, vol. 51, no. 1, pp. 275--338, 2025.
+
+
+
+\bibitem{devlin2019}
+J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova,
+``BERT: Pre-training of deep bidirectional transformers for language
+understanding,''
+in \textit{Proc. 2019 Conference of the North American Chapter of the
+Association for Computational Linguistics: Human Language Technologies
+(NAACL-HLT)}, 2019, pp. 4171--4186.
+
+
+
+\bibitem{he2021}
+P. He, X. Liu, J. Gao, and W. Chen,
+``DeBERTa: Decoding-enhanced BERT with disentangled attention,''
+in \textit{Proc. International Conference on Learning Representations
+(ICLR)}, 2021.
+
+
+
+\bibitem{kirchenbauer2023}
+J. Kirchenbauer, J. Geiping, Y. Wen, J. Katz, I. Miers, and T. Goldstein,
+``A watermark for large language models,''
+in \textit{Proc. 40th International Conference on Machine Learning (ICML)},
+2023.
+
+
+
 \bibitem{tufts2025}
 B. Tufts, X. Zhao, and L. Li,
 ``A practical examination of AI-generated text detectors for large language
 models,''
 in \textit{Findings of the Association for Computational Linguistics:
 NAACL 2025}, 2025, pp. 4839--4856.
+
+
 
 \bibitem{pedrotti2025}
 A. Pedrotti, M. Papucci, C. Ciaccio, A. Miaschi, G. Puccetti,
@@ -1439,11 +1473,15 @@ writing style to fool detectors,''
 in \textit{Findings of the Association for Computational Linguistics:
 ACL 2025}, 2025, pp. 3010--3031.
 
+
+
 \bibitem{zha2025padben}
 Y. Zha, R. Min, and S. Sushmita,
 ``PADBen: A comprehensive benchmark for evaluating AI text detectors against
 paraphrase attacks,''
 \textit{arXiv preprint arXiv:2511.00416}, 2025.
+
+
 
 \bibitem{baidya2026}
 M. S. Baidya, S. S. Baidya, and C. Chawla,
@@ -1451,17 +1489,16 @@ M. S. Baidya, S. S. Baidya, and C. Chawla,
 detectors across architectures, domains, and adversarial conditions,''
 \textit{arXiv preprint arXiv:2603.17522}, 2026.
 
-\bibitem{wu2025survey}
-J. Wu, S. Yang, R. Zhan, Y. Yuan, L. S. Chao, and D. F. Wong,
-``A survey on LLM-generated text detection: Necessity, methods, and future
-directions,''
-\textit{Computational Linguistics}, vol. 51, no. 1, pp. 275--338, 2025.
 
-\bibitem{dettmers2023}
-T. Dettmers, A. Pagnoni, A. Holtzman, and L. Zettlemoyer,
-``QLoRA: Efficient finetuning of quantized LLMs,''
-in \textit{Proc. 37th Annual Conference on Neural Information Processing
-Systems (NeurIPS)}, 2023.
+
+\bibitem{wu2024detectrl}
+J. Wu, R. Zhang, and W. Ma,
+``DetectRL: Benchmarking LLM-generated text detection in real-world
+scenarios,''
+in \textit{Proc. 38th Annual Conference on Neural Information Processing
+Systems (NeurIPS)}, 2024.
+
+
 
 \bibitem{isenko2022}
 A. Isenko, R. Mayer, J. Jedele, and H.-A. Jacobsen,
@@ -1469,6 +1506,16 @@ A. Isenko, R. Mayer, J. Jedele, and H.-A. Jacobsen,
 preprocessing pipelines,''
 in \textit{Proc. 2022 International Conference on Management of Data
 (SIGMOD)}, 2022.
+
+
+
+\bibitem{dettmers2023}
+T. Dettmers, A. Pagnoni, A. Holtzman, and L. Zettlemoyer,
+``QLoRA: Efficient finetuning of quantized LLMs,''
+in \textit{Proc. 37th Annual Conference on Neural Information Processing
+Systems (NeurIPS)}, 2023.
+
+
 
 \end{thebibliography}
 

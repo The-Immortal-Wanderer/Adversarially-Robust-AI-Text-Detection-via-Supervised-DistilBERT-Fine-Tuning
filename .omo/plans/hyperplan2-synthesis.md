@@ -1,3 +1,6 @@
+> [!CAUTION]
+> **SUPERSEDED**: This synthesis was absorbed into the [`end-to-end-restructure-plan.md`](./end-to-end-restructure-plan.md). All active work references the end-to-end plan.
+
 # Hyperplan Round 2 — Defensible Insights Bundle
 
 *Generated from 4 adversarial critics × 3 rounds (independent analysis → cross-attack → defend/refine/concede). 42 initial issues distilled to 21 actionable items below.*

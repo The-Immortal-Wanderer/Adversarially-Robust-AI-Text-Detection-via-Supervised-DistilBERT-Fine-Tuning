@@ -55,7 +55,7 @@ Auditor: Sisyphus-Junior (Prometheus Read-Only)
   - "Unseen evaluation set (10,000 samples)" — matches unseen_cap=10000 ✓
 
 [PASS] Hardware specs:
-  - RTX 3050 8GB, Ryzen 5600X, 32GB RAM, CUDA 12.1 — matches paper ✓
+  - RTX 4050 6GB, Ryzen 5600X, 32GB RAM, CUDA 12.4 — matches paper ✓ (NOTE: paper references RTX 4050; training runs used RTX 3050 8GB)
 
 [PASS] Repository URL in Setup: `https://github.com/The-Immortal-Wanderer/ai-text-detection-ablation.git` — internally consistent ✓
 
