@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,11 +26,6 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent  # src/ importable via pip install -e .
 
 from src.evaluation.metrics import compute_rrd  # noqa: E402
-
-
-def _is_kaggle() -> bool:
-    """Detect whether we are running inside a Kaggle kernel."""
-    return bool(os.environ.get("KAGGLE_KERNEL_RUN_TYPE")) or Path("/kaggle").exists()
 
 ABLATIONS: list[str] = ["baseline1", "ablation_a", "ablation_b", "ablation_c"]
 RRD_SPREAD_THRESHOLD: float = 6.0
@@ -121,8 +115,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--checkpoint-dir",
-        default=("ann-project-runlog/artifacts" if _is_kaggle() else "artifacts/distilbert_detector"),
-        help="Directory containing checkpoint .pt files. Auto-detects Kaggle vs local.",
+        default="artifacts/distilbert_detector",
+        help="Directory containing checkpoint .pt files (default: artifacts/distilbert_detector; on Kaggle use ann-project-runlog/artifacts/).",
     )
     parser.add_argument(
         "--results-dir",

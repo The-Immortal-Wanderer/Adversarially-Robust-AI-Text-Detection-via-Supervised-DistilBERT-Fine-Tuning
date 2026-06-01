@@ -198,7 +198,7 @@ Experiments were developed and tested on:
 - **Config-driven pipeline**: YAML configuration for reproducible experiment management
 
 **Kaggle requirements**:
-- **Pre-cache DistilBERT** to a Kaggle Dataset (`tetsujin007/distilbert-base-uncased`) before multi-session runs — unauthenticated HuggingFace Hub has a 100 req/hr rate limit on shared Kaggle IPs, and each session downloads ~268 MB. Run once from a Kaggle notebook: `python scripts/cache_pretrained.py`. See [F-004](.omo/issues/MASTER_REGISTER.md#f-004---distilbert-not-pre-cached-in-kaggle-dataset) in the issue registry.
+- **Pre-cache DistilBERT** to a Kaggle Dataset (`{owner}/distilbert-base-uncased`) before multi-session runs — unauthenticated HuggingFace Hub has a 100 req/hr rate limit on shared Kaggle IPs, and each session downloads ~268 MB. See [F-004](.omo/issues/MASTER_REGISTER.md#f-004---distilbert-not-pre-cached-in-kaggle-dataset) in the issue registry.
 - Data on disk is now set-exclusion cleaned: **zero overlapping human texts** between train and unseen pools (verified after regeneration via `scripts/setup_data.py`). Previous runs used contaminated data with 6,029 overlapping humans (~61% of unseen pool).
 
 ## Citation
